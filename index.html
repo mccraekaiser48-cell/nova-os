@@ -23888,7 +23888,15 @@ for (const a of APPS) if (a.id === "explorer") a.render = renderExplorer2;
   }
 
   function syncWin11() {
-    document.documentElement.dataset.win11 = store.get("win11", "0") === "1" ? "1" : "0";
+    const on = store.get("win11", "0") === "1";
+    document.documentElement.dataset.win11 = on ? "1" : "0";
+    /* Windows 11 mode is a light shell: apply the Fluent palette and the
+       Windows blue accent to the root the moment it is switched on, since the
+       theme was already painted earlier in the boot. */
+    if (on) {
+      document.documentElement.dataset.theme = "light";
+      document.documentElement.style.setProperty("--accent", store.get("accent", "#0067c0"));
+    }
     paintStart();
   }
 
@@ -23900,6 +23908,16 @@ for (const a of APPS) if (a.id === "explorer") a.render = renderExplorer2;
   if (store.get("premiumBoot12", "0") !== "1") {
     store.set("win11", "0");
     store.set("premiumBoot12", "1");
+  }
+  /* Windows 11 is the default look in this build: Fluent chrome, a centred
+     taskbar, the light theme, Windows blue accent and a Bloom wallpaper. */
+  if (store.get("win11Default", "0") !== "1") {
+    store.set("win11", "1");
+    store.set("theme", "light");
+    store.set("accent", "#0067c0");
+    store.set("premiumWall", "bloom11");
+    store.set("barAlign", "center");
+    store.set("win11Default", "1");
   }
   syncWin11();
 
@@ -25182,139 +25200,526 @@ if (!APPS.some(a => a.id === "linux")) {
 
 
 /* ==========================================================================
-   Windows (VM) — boots a real x86 Windows-compatible image in v86.
+   Linux Games — modern PC games that actually run on Linux.
 
-   No image ships with this page: ReactOS is free and can be downloaded from
-   reactos.org, and a Windows 95/98/2000 ISO you own will also boot here.
-   The image is read from the local file picker, so nothing is uploaded and no
-   external host or CORS rule is involved.
+   No browser tab can run these; they need a GPU, Proton and a real kernel.
+   This app is the catalogue that matters for a Linux machine (a Steam Deck, a
+   desktop running Steam, or a streamed Linux host): titles with a native Linux
+   build, and titles Valve certifies through Proton. Anything with kernel
+   anti-cheat or no Linux path at all is listed as unsupported, not hidden.
    ========================================================================== */
 
-function renderWinVM(rec) {
+
+const LINUX_IN_OS = [
+  { n: 'Mindustry', d: 'Anuke · factory defence, TeaVM port', u: 'https://khoichon.dev/mindustry-web/offlinemode/build/', note: 'The open-source Linux game compiled from Java to WebAssembly. Saves export and import, so progress survives a reload.' },
+  { n: 'OpenTTD', d: 'Transport sim, Emscripten build', u: 'https://openttdonline.com/play', note: 'The open-source transport game, built for the browser with OpenGFX assets. Generates maps locally.' },
+  { n: 'Freeciv', d: 'Turn-based strategy, Freeciv-web', u: 'https://freecivweb.org/', note: 'The browser client of Freeciv. Long games, and it runs entirely here until you join a network match.' }
+];
+
+
+
+function renderLinuxGames(rec) {
   rec.body.innerHTML =
-    '<div style="display:flex;flex-direction:column;height:100%">' +
-      '<div class="row" style="padding:8px 10px;border-bottom:1px solid var(--line);gap:6px;flex-wrap:wrap;align-items:center">' +
-        '<input id="wvFile" type="file" accept=".iso,.img,.bin,.vhd" aria-label="Operating system image" style="max-width:230px;font-size:12px">' +
-        '<select id="wvMem" class="btn" aria-label="Memory size" style="height:30px">' +
-          '<option value="256" selected>256 MB</option><option value="512">512 MB</option><option value="128">128 MB</option>' +
-        '</select>' +
-        '<button class="btn" id="wvBoot" disabled>Boot image</button>' +
-        '<button class="btn" id="wvStop" disabled>Stop</button>' +
-        '<span class="small muted grow" id="wvStatus">no image loaded</span>' +
+    '<div class="pad" style="max-width:820px;height:100%;display:flex;flex-direction:column;gap:12px">' +
+      '<div>' +
+        '<h3 class="sec" style="margin:0 0 4px">Linux games that run inside this OS</h3>' +
+        '<p class="small muted" style="margin:0">Open-source Linux games compiled to WebAssembly. Click Play and the game loads in this window — no install step, no tab, no Steam. Commercial Steam titles still cannot be installed in a browser; these are the ones that genuinely can.</p>' +
       '</div>' +
-      '<div id="wvScreen" tabindex="0" style="flex:1;overflow:auto;background:#05070b;padding:10px;outline:none;min-height:0"></div>' +
-      '<div class="small muted" style="padding:6px 10px;border-top:1px solid var(--line);display:flex;gap:12px;flex-wrap:wrap">' +
-        '<span class="grow">A real x86 machine in this tab. Load a <b>ReactOS live ISO</b> (free, <a href="https://reactos.org/download/" target="_blank" rel="noopener noreferrer">reactos.org/download</a>) or a Windows 95/98/2000 image you own.</span>' +
-        '<span>No shared folder: .exe files must live inside the image.</span>' +
+      '<div id="lgStage" style="display:none;flex:1;min-height:300px;border:1px solid var(--line);border-radius:12px;overflow:hidden;background:#07090c"></div>' +
+      '<div id="lgCards" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:10px">' +
+        LINUX_IN_OS.map((g, i) =>
+          '<div class="card" style="padding:12px;display:flex;flex-direction:column;gap:8px">' +
+            '<b>' + g.n + '</b><span class="small muted">' + g.d + '</span>' +
+            '<span class="small muted" style="opacity:.85">' + g.note + '</span>' +
+            '<div class="row" style="gap:6px;margin-top:auto">' +
+              '<button class="btn" type="button" data-play="' + i + '">Play in OS</button>' +
+              '<a class="btn" href="' + g.u + '" target="_blank" rel="noopener noreferrer">Tab ↗</a>' +
+            '</div></div>').join('') +
       '</div>' +
     '</div>';
 
-  const screen = rec.body.querySelector('#wvScreen');
-  const statusEl = rec.body.querySelector('#wvStatus');
-  const fileInput = rec.body.querySelector('#wvFile');
-  const memSel = rec.body.querySelector('#wvMem');
-  const bootBtn = rec.body.querySelector('#wvBoot');
-  const stopBtn = rec.body.querySelector('#wvStop');
+  const stage = rec.body.querySelector('#lgStage');
+  const cards = rec.body.querySelector('#lgCards');
+  let active = -1;
 
-  screen.innerHTML = '<div style="white-space:pre;font:13px/1.25 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;color:#d7e3ff"></div>' +
-    '<canvas style="max-width:100%;image-rendering:pixelated"></canvas>';
-
-  let emu = null;
-  let starting = false;
-  const setStatus = (s) => { if (statusEl) statusEl.textContent = s; };
-
-  fileInput.addEventListener('change', () => {
-    const f = fileInput.files && fileInput.files[0];
-    if (!f) { bootBtn.disabled = true; setStatus('no image loaded'); return; }
-    bootBtn.disabled = false;
-    setStatus('ready: ' + f.name + ' (' + (f.size / 1048576).toFixed(1) + ' MB)');
+  rec.body.querySelectorAll('[data-play]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const i = Number(btn.dataset.play);
+      if (active === i) { stage.style.display = 'none'; stage.innerHTML = ''; active = -1; btn.textContent = 'Play in OS'; return; }
+      active = i;
+      rec.body.querySelectorAll('[data-play]').forEach(b => { b.textContent = 'Play in OS'; });
+      btn.textContent = 'Stop';
+      stage.style.display = 'block';
+      stage.innerHTML = '';
+      const f = document.createElement('iframe');
+      f.src = LINUX_IN_OS[i].u;
+      f.style.cssText = 'width:100%;height:100%;border:0;background:#07090c';
+      f.setAttribute('allow', 'fullscreen; gamepad; autoplay');
+      stage.appendChild(f);
+      cards.style.display = 'none';
+      const back = document.createElement('button');
+      back.className = 'btn'; back.type = 'button'; back.textContent = '◀ Back to library';
+      back.style.cssText = 'position:absolute;right:14px;top:10px;z-index:5';
+      back.addEventListener('click', () => { stage.style.display = 'none'; stage.innerHTML = ''; cards.style.display = 'grid'; active = -1; back.remove(); rec.body.querySelectorAll('[data-play]').forEach(b => { b.textContent = 'Play in OS'; }); });
+      rec.body.style.position = 'relative';
+      rec.body.appendChild(back);
+    });
   });
-
-  const boot = async () => {
-    if (emu || starting) return;
-    const file = fileInput.files && fileInput.files[0];
-    if (!file) return;
-    starting = true;
-    bootBtn.disabled = true;
-    setStatus('loading the emulator');
-    try {
-      await loadV86();
-    } catch (err) {
-      setStatus('failed: ' + err.message);
-      starting = false; bootBtn.disabled = false;
-      return;
-    }
-    const Ctor = window.V86 || window.V86Starter;
-    let biosBuf, vgaBuf, wasmUrl;
-    try {
-      biosBuf = await fetchVm('bios');
-      vgaBuf = await fetchVm('vga_bios');
-      wasmUrl = URL.createObjectURL(new Blob([await fetchVm('wasm', 'wasm_gz')], { type: 'application/wasm' }));
-    } catch (err) {
-      setStatus('emulator files unavailable: ' + err.message);
-      starting = false; bootBtn.disabled = false;
-      return;
-    }
-    let image;
-    try {
-      setStatus('reading ' + file.name);
-      image = await file.arrayBuffer();
-    } catch (err) {
-      setStatus('could not read the image: ' + err.message);
-      starting = false; bootBtn.disabled = false;
-      return;
-    }
-    const isDisk = /\.(img|bin|vhd)$/i.test(file.name);
-    const memMB = Number(memSel.value) || 256;
-    const cfg = {
-      wasm_path: wasmUrl,
-      bios: { buffer: biosBuf },
-      vga_bios: { buffer: vgaBuf },
-      screen_container: screen,
-      autostart: true,
-      memory_size: memMB * 1024 * 1024,
-      vga_memory_size: 8 * 1024 * 1024,
-      disable_speaker: true
-    };
-    cfg[isDisk ? 'hda' : 'cdrom'] = { buffer: image };
-    try {
-      emu = new Ctor(cfg);
-      stopBtn.disabled = false;
-      setStatus('booting ' + file.name + ' as ' + (isDisk ? 'a hard disk' : 'a CD') + ' with ' + memMB + ' MB RAM');
-      emu.add_listener('emulator-ready', () => {
-        setStatus('running — click the screen to type and use the mouse');
-        screen.focus();
-      });
-    } catch (err) {
-      setStatus('could not start the machine: ' + err.message);
-      bootBtn.disabled = false;
-    }
-    starting = false;
-  };
-
-  const stop = () => {
-    try { emu && emu.destroy(); } catch {}
-    emu = null; starting = false;
-    bootBtn.disabled = !(fileInput.files && fileInput.files[0]);
-    stopBtn.disabled = true;
-    setStatus('stopped');
-  };
-
-  bootBtn.addEventListener('click', boot);
-  stopBtn.addEventListener('click', stop);
-  screen.addEventListener('pointerdown', () => screen.focus());
-
-  const guard = setInterval(() => {
-    if (!document.body.contains(rec.el)) {
-      clearInterval(guard);
-      try { emu && emu.destroy(); } catch {}
-      emu = null;
-    }
-  }, 2000);
 }
 
-if (!APPS.some(a => a.id === 'winvm')) {
-  APPS.push({ id: 'winvm', name: 'Windows (VM)', glyph: 'W', size: [860, 580], render: renderWinVM });
+if (!APPS.some(a => a.id === 'linuxgames')) {
+  APPS.push({ id: 'linuxgames', name: 'Linux Games', glyph: 'L', size: [900, 680], render: renderLinuxGames });
+}
+
+
+/* ==========================================================================
+   Steam Desktop — the real client, streamed into this window.
+
+   Steam cannot be installed in a tab: it is a 64-bit native app with its own
+   Chromium, GPU access and a 30-60 GB library. What can be done honestly is to
+   put the desktop it runs on inside a window. A PC with Steam plus Sunshine
+   (the game-stream host) and a moonlight-web-stream server gives a WebRTC URL
+   that renders here as the actual client — same login, same library, same
+   downloads, running on real hardware.
+   ========================================================================== */
+
+/* ==========================================================================
+   Steam Desktop — library, store, downloads, detail pane, overlay.
+
+   Catalogue: Carter54git/Ultimate-Catalog-Of-Web-Game-Ports (1011 titles,
+   568 playable). Install registers the port as an app in this OS (Start menu
+   under Installed, own window, persisted in localStorage), then tries to cache
+   it into the Cache API. Most hosts block cross-origin reads, so a port often
+   reports "online only" — that is the truth, not a fake progress bar.
+   ========================================================================== */
+
+const STEAM_PORTS = [["Девятка (1994)","https://rgc.zone/ports/nine-1994/index.html",null],["-3","https://gn-math.dev/?id=816","https://github.com/aukak/-3"],["-b",null,"https://github.com/web-ports/baldi-mods/tree/main/-b"],["20 Minutes Till Dawn","https://gn-math.dev/?id=819","https://github.com/web-ports/20-minutes"],["3D Pinball for Windows - Space Cadet","https://ksylvestre.itch.io/space-cadet-pinball","https://github.com/k4zmu2a/SpaceCadetPinball"],["60 Seconds!",null,"https://github.com/usheje883-maker/60-Seconds-Webport"],["A2 Racer IV: De Politie slaat terug",null,"https://github.com/NostalgiaRealm/A2-Racer-4"],["Abuse",null,"https://github.com/midzer/abuse"],["Ages of Conflict","https://wasm.rip/files/aoc/index.html",null],["Albion",null,"https://github.com/IS4Code/Albion"],["Alley Cat","https://petarov.github.io/alleycat.exe/","https://github.com/petarov/alleycat.exe"],["Alone in the Dark (aitd)",null,"https://github.com/xesf/aitd"],["Amanda The Adventurer","https://gn-math.github.io/web-port/amanda-the-adventurer/","https://github.com/genizy/web-port/tree/main/amanda-the-adventurer"],["Amazing Alex","https://nomadic-ua.itch.io/amazing-alex",null],["American McGee’s Alice","https://github.com/yselimarslan98-dot/alice-web",null],["Ambidextro",null,"https://github.com/chromecrash/Ambidextro-browser-port"],["Among Us","https://wasm.rip/files/amongus/index.html","https://github.com/wasmdotrip/AmongUsPort"],["Anarch",null,"https://gitlab.com/drummyfish/anarch"],["Andy's Apple Farm","https://gn-math.github.io/web-port/andys-apple-farm/","https://github.com/genizy/web-port/tree/main/andys-apple-farm"],["Angband",null,"https://github.com/angband/angband"],["Angry Birds 2",null,"https://github.com/Reeyuki/angry2"],["Angry Birds Epic v3.0.1",null,"https://github.com/DarkTerraYT/EpicWeb"],["Animal Crossing","https://rgc.zone/ports/ac-webport-main/index.html","https://github.com/web-ports/ac-gamecube"],["Animal Crossing (GAMECUBE)","https://gn-math.dev/?id=828",null],["Another World (another-world-suite)",null,"https://github.com/malandrin/another-world-suite"],["Anton Blast Demo",null,"https://github.com/burnedpopcorn/Anton-Blast-Demo-Web-Port"],["Antonblast","https://gn-math.dev/?id=711","https://github.com/web-ports/antonblast"],["Apes vs Helium","https://gn-math.dev/?id=783","https://github.com/bubbls/UGS-Assets/tree/main/apesvshelium"],["Apotheon",null,"https://github.com/degloved-net/Apotheon"],["Apotris",null,"https://gitea.com/akouzoukos/apotris"],["Arcade games (arcade-js)",null,"https://github.com/qarl/arcade-js"],["Arco",null,"https://github.com/degloved-net/arco"],["Arthur's Nightmare","https://gn-math.dev/?id=645",null],["Arx Fatalis (Arxwasm Demo)","https://wasm.continuation-labs.com/arxdemo/",null],["Arx Fatalis (rgc.zone)","https://rgc.zone/ports/arxweb/index.html",null],["AstroMenace",null,"https://github.com/midzer/astromenace"],["Asylum",null,"https://github.com/GMH-Code/Asylum"],["Atlantis: The Lost Tales","https://ripleyxlr8.github.io/atlantis-native/","https://github.com/ripleyXLR8/atlantis-native"],["Atomiks",null,"https://github.com/midzer/atomiks"],["AXIS (2005)",null,"https://github.com/reikop/axis-web"],["Azimuth",null,"https://github.com/midzer/azimuth"],["Backyard Baseball '97",null,"https://github.com/degloved-net/backyard-baseball-97"],["Bad Parenting 1","https://gn-math.dev/?id=166",null],["Bad Piggies","https://gn-math.dev/?id=752",null],["Balatro",null,"https://github.com/W0W53R/web-balatro"],["Baldi Balds The Universe",null,"https://github.com/reeyuki/baldiBaldsTheUniverse"],["Baldi's Basics Birthday Bash","https://wasm.rip/files/birthdaybash/index.html","https://github.com/woahhcrackers/BirthdayBashWeb"],["Baldi's Basics Classic Remastered","https://gn-math.github.io/web-port/baldi-remaster/","https://github.com/genizy/web-port/tree/main/baldi-remaster"],["Baldi's Basics Plus","https://gn-math.github.io/web-port/baldi-plus/","https://github.com/genizy/web-port/tree/main/baldi-plus"],["Baldi's Basics: Minus 3",null,"https://github.com/aukak/-3"],["Ballerburg SDL","https://baller.tuxfamily.org/",null],["Banished (unbanished)",null,"https://github.com/tanepiper/unbanished"],["Bat to Bed Demo",null,"https://github.com/gays-studio/BatToBed-DEMO-webport"],["Bat to the Heavens",null,"https://github.com/gays-studio/bat-to-the-heavens"],["Battle City","https://battle-city.berrry.app","https://github.com/vgrichina/battlecity"],["Battle Stadium D.O.N","https://battlestadium.online/",null],["Beat Banger",null,"https://github.com/ajtabjs/bbport"],["Beatblock","https://gn-math.dev/?id=787",null],["Beatblock","https://wasm.rip/files/beatblock/index.html",null],["Before Close",null,"https://github.com/xxuep/before-close-webport"],["Bendy and The Ink Machine","https://gn-math.github.io/web-port/bendy/","https://github.com/genizy/web-port/tree/main/bendy"],["Bendy and The Ink Machine (2)","https://wasm.rip/files/BATIM/index.html","https://github.com/slqntdevss/BATIMFullPort"],["Bendy and The Ink Machine (3)","https://gn-math.github.io/web-port/bendy/","https://github.com/genizy/web-port/tree/main/bendy"],["Bendy and The Ink Machine (4)",null,"https://github.com/web-ports/bendy-and-the-ink-machine"],["Bendy and The Ink Machine (5)",null,"https://github.com/woahhcrackers/BATIMWeb"],["Bendy and the Ink Machine: ALL CHAPTERS","https://gn-math.dev/?id=803",null],["Beneath a Steel Sky (ScummWeb)","https://scummweb.tsilva.eu/beneath-a-steel-sky/play",null],["BERGENTRUCK 201x","https://gn-math.github.io/web-port/bergentruck/","https://github.com/genizy/web-port/tree/main/bergentruck"],["Bermuda Syndrome",null,"https://github.com/cyxx/bermuda"],["BFDI: Branches",null,"https://github.com/highestage/web-port-games/tree/main/bfdi-branches"],["The Binding of Isaac: Repentance","https://tboi.online/","https://github.com/chiikabu/the-browsing-of-isaac"],["Biolab Disaster",null,"https://github.com/phoboslab/high_biolab"],["A Bite at Freddy's","https://gn-math.dev/?id=258","https://github.com/freebuisness/assets/tree/main/258"],["Black Hole Fishing",null,"https://github.com/mynamescrax/gamesforaetheris/tree/main/blackholefishing"],["Blobby Volley 2",null,"https://github.com/danielknobe/blobbyvolley2"],["Bloboats",null,"https://github.com/midzer/bloboats"],["Block Blast",null,"https://github.com/SomeRandomFella/portsandrips/tree/master/blockblast-port"],["Blood: One Unit Whole Blood (NotBlood-Chosen)",null,"https://github.com/AdrianPol-projects/NotBlood-Chosen"],["BLOODMONEY!","https://gn-math.github.io/web-port/bloodmoney/","https://github.com/genizy/web-port/tree/main/bloodmoney"],["bog/aukak",null,"https://github.com/aukak"],["boil Noodles at Night","https://wasm.rip/files/boilnoodles/index.html","https://github.com/SomeRandomFella/portsandrips/tree/master/boilnoodles"],["Bombermaaan",null,"https://github.com/midzer/Bombermaaan"],["BottleShip (NFS Underground 2, XIII, Far Cry, Mafia, The Bard's Tale…)",null,"https://github.com/jenissimo/bottleship"],["Bowerwhelm",null,null],["Brawlhalla","https://truffled.lol/games/brawlhalla/index.html",null],["breadbb/genizy",null,"https://github.com/genizy"],["BreakHack",null,"https://github.com/midzer/breakhack"],["Brogue",null,"https://github.com/midzer/BrogueCE"],["Brotato","https://gn-math.dev/?id=723","https://github.com/BlueGameMC/BrotatoWeb"],["Brotato (2)","https://wasm.rip/files/bpac/index.html","https://github.com/gays-studio/brotato-webport/"],["Brotato (3)",null,"https://github.com/wowdabug/s1/tree/main/brotato"],["Brotato (4)",null,"https://github.com/degloved-net/brotato-web"],["Brutal Doom","https://rgc.zone/ports/brutaldoom/index.html",null],["Bubble Bobble",null,"https://github.com/cookertron/BubbleBobble"],["Buckshot Roulette","https://gn-math.github.io/web-port/buckshot-roulette/","https://github.com/genizy/web-port/tree/main/buckshot-roulette"],["Buckshot Roulette (2)",null,"https://github.com/Stratus-Games/Buckshot-NEWEST-Port"],["Buckshot Roulette (3)",null,"https://github.com/degloved-net/buckshot-roulette-web"],["Bumpy's Arcade Fantasy","https://rgc.zone/ports/bumpyweb/openbumpy.html",null],["burnedwebsite",null,"https://github.com/burnedpopcorn/burnedwebsite"],["Burnout 3: Takedown","https://burnout3.online/",null],["Buster Jam","https://gn-math.dev/?id=646",null],["C-Dogs SDL",null,"https://github.com/midzer/cdogs-sdl"],["Caesar II","https://second-impressions.github.io/caesar2-port/",null],["Caesar III",null,"https://github.com/bvschaik/julius"],["Caesar III (Augustus)",null,"https://github.com/Keriew/augustus"],["Call of Duty Web Collection","https://cod-webports.pages.dev/",null],["Call of Duty: Black Ops Zombies","http://vel.gg/bo1z",null],["Call of Duty: Black Ops Zombies (2)","https://vel.gg/bsz","https://github.com/AllanLotta/bo1-zombies-coop"],["Call of Duty: Modern Warfare 2","https://ovz-game-production.up.railway.app",null],["Call of Mini: Dino Hunter (Revival)","https://comdh.krig.games/",null],["Candy Crisis",null,"https://github.com/midzer/CandyCrisis"],["Capuchin",null,"https://github.com/aukak/Capuchin"],["Carmageddon","https://rgc.zone/ports/carmaweb/index.html","https://github.com/Carter54git/dethrace-ported-to-web"],["Carmageddon II: Carpocalypse Now","https://rgc.zone/ports/carma2web/index.html","https://github.com/Carter54git/carmageddon-2-ported-to-web"],["CaseOh's Basics in Eating and Fast Food","https://gn-math.dev/?id=758",null],["Castle Crashers","https://truffled.lol/games/castle/index.html",null],["Cat Goes Fishing",null,"https://github.com/Reeyuki/CatFish"],["Catchaware",null,"https://github.com/barnicalstuff/captchaware"],["Cave Story","https://rgc.zone/ports/cavestory/index.html","https://github.com/midzer/nxengine-evo"],["Cave Story","https://midzer.de/wasm/cavestory/",null],["Celeste","https://gn-math.dev/?id=623","https://github.com/MercuryWorkshop/celeste-wasm"],["Celeste (2)","https://celeste.r58playz.dev/","https://github.com/web-ports/celeste"],["Celeste 3D",null,"https://github.com/gays-studio/celeste3d"],["Celeste 64",null,"https://github.com/MercuryWorkshop/Celeste64"],["Chain-Chillas",null,"https://github.com/Camzzz-vrgt/chain-chillas-web"],["Chasing Tails ~A Promise in the Snow~",null,"https://github.com/gays-studio/chasingtails"],["Chasm: The Rift","https://rgc.zone/ports/chasmweb/run.html",null],["Cheese Cube","http://cheese-cube.pages.dev",null],["Cheese Rollers",null,"https://github.com/SomeRandomFella/portsandrips/tree/master/CheeseRollingWeb"],["Cheese Rolling","https://gn-math.dev/?id=762",null],["Cheese Rolling","https://wasm.rip/files/cheese-rolling/index.html",null],["Cheesed Up 1.3.1",null,"https://github.com/burnedpopcorn/Cheesed-Up-1.3.1-Web-Port"],["Chip's Challenge (chipdx)",null,"https://github.com/CasualX/chipdx"],["Christmas Massacre","https://gn-math.dev/?id=734","https://github.com/web-ports/christmas-massacre"],["Chromium B.S.U.",null,"https://github.com/midzer/chromium-bsu"],["Circus Linux!",null,"https://github.com/ICTylor/circuslinux"],["Class of '09","https://gn-math.github.io/web-port/class-of-09/","https://github.com/genizy/web-port/tree/main/class-of-09"],["Class of '09: The Flip Side",null,"https://github.com/AlexBoops/TFS"],["Class of '09: The Re-Up",null,"https://github.com/AlexBoops/tru"],["Claude of Duty: Vibe Slops II","https://froydinger.github.io/claude-of-duty/","https://github.com/froydinger/claude-of-duty"],["Claude of Duty: Vibe Slops II (GoofyAhhBro69420 mirror)","https://goofyahhbro69420.github.io/Black-Ops-2/",null],["Claw",null,"https://github.com/midzer/OpenClaw"],["Click to Ten",null,"https://github.com/BestSpark687090/bestspark-web-ports/tree/main/click-to-ten"],["Clover Pit","https://gn-math.dev/?id=716","https://github.com/web-ports/clover-pit"],["Clustertruck","https://wasm.rip/files/ClusterTruck/clustertruck.html","https://github.com/wasmdotrip/Clustertruck-Port"],["Command & Conquer",null,"https://github.com/midzer/Vanilla-Conquer"],["Command & Conquer: Generals (wasm.com.br)","https://generals.wasm.com.br/",null],["Command & Conquer: Generals Zero Hour","https://generals.wasm.ltd","https://github.com/origami-ltd/wasm-generals"],["Command & Conquer: Red Alert 2","https://chronodivide.com/",null],["Command & Conquer: Renegade (Open Commando)","https://open-commando.netanelgilad.workers.dev","https://github.com/netanelgilad/open-commando"],["Commander Keen","https://www.jamesfmackenzie.com/chocolatekeen/","https://github.com/jamesfmackenzie/chocolatekeen"],["Counter Strike & Half Life",null,"https://github.com/yohimik/webxash3d-fwgs"],["Counter Strike & Half Life (2)","https://pixelsuft.github.io/hl/","https://github.com/Pixelsuft/hl"],["Counter Strike & Half Life frontend (2)",null,"https://github.com/Pixelsuft/hl"],["Counter Strike 1.6",null,"https://github.com/woahhcrackers/Global-Strike"],["Counter Strike 1.6 (2)","https://csjs.live",null],["Counter Strike 2019","https://webstrike.me",null],["Counter-Strike (GStrike)","https://wasm.rip/files/gstrike/index.html",null],["Counter-Strike 2 (cs2go, Three.js)","https://cs2go.3kh0.net","https://github.com/3kh0/cs2go"],["Counter-Strike: Source Bunnyhop","https://bunnyhop.lol",null],["Counter-Strike: Source Surf","http://surfd.net",null],["Crash Bash Online","https://crashbash.app/",null],["Crash Nitro Kart","https://crashnitrokart.online/",null],["Crash Team Racing (High Octane)","https://rinnegatamante.github.io/Crash-Team-Racing-High-Octane/",null],["Crash Team Racing Turbocharged","https://ctr.cmzi.uk/",null],["Crashout Crew","https://wasm.rip/files/cc/index.html",null],["Crazy Cattle 3D","https://gn-math.dev/?id=164",null],["Createrria","https://nomadic-ua.itch.io/createrria",null],["Crisis Core: Final Fantasy VII","https://crisiscorefinalfantasy7.online/",null],["Cro-Mag Rally","https://midzer.de/wasm/cromagrally/","https://github.com/midzer/CroMagRally"],["Cruelty Squad","https://gn-math.dev/?id=825","https://github.com/imt00dizzy/cruelty-squad"],["Cruelty Squad (2)",null,"https://github.com/web-ports/cruelty-squad"],["Cultures: 8th Wonder of the World / Northland (cultures-saga-wasm)",null,"https://github.com/cyberneticangel/cultures-saga-wasm"],["Cuphead","https://gn-math.github.io/web-port/cuphead/","https://github.com/genizy/web-port/tree/main/cuphead"],["Cuphead (2)",null,"https://github.com/woahhcrackers/CupheadWeb"],["Cuphead (3)",null,"https://github.com/web-ports/cuphead"],["Cuphead (4)","https://wasm.rip/files/cuphead/index.html",null],["Cut the Rope (H5DX)","https://yell0wsuit.github.io/cuttherope-h5dx/index.html",null],["Cut the Rope DX","https://yell0wsuit.github.io/cuttherope-dx/",null],["Cuyo",null,"https://github.com/midzer/cuyo"],["Cyberpunk 2077","https://cyberpunk2077.lol/",null],["Daggerfall (DaggerfallJS)","https://daggerfalljs.dev/",null],["A Dance of Fire and Ice",null,"https://github.com/Nawsif/host/tree/main/ADOFAI"],["Dawnfolk",null,"https://github.com/degloved-net/dawnfolk"],["Daytona USA","https://johannruiz.github.io/Daytona-USA-Web/","https://github.com/johannruiz/Daytona-USA-Web"],["Dead Plate","https://gn-math.github.io/web-port/dead-plate/","https://github.com/genizy/web-port/tree/main/dead-plate"],["Deadseat","https://gn-math.github.io/web-port/deadseat/","https://github.com/genizy/web-port/tree/main/deadseat"],["The Deadseat","https://gn-math.github.io/web-port/deadseat/","https://github.com/genizy/web-port/tree/main/deadseat"],["The Deadseat",null,"https://github.com/TheBlehLollipop/The-Deadseat-Webport"],["Def Jam: Fight for NY","https://def-jam.online/",null],["Defblade",null,"https://github.com/midzer/paper-world"],["Deltarune","https://gn-math.github.io/web-port/deltatraveler/","https://github.com/genizy/web-port/tree/main/deltatraveler"],["Deltarune",null,"https://github.com/Mollomm1/test"],["Deltarune Chapters 1-4","https://aukak.itch.io/deltarune",null],["Deltatraveler","https://gn-math.dev/?id=560",null],["Der Clou!",null,"https://github.com/midzer/derclou"],["Descent","https://rgc.zone/ports/descentweb/index.html",null],["Descent (d1wasm)","https://descent.2ar.nl/","https://github.com/arbruijn/d1wasm"],["Descent (DXX-Rebirth)","https://midzer.de/wasm/descent1/",null],["Descent I",null,"https://github.com/midzer/dxx-rebirth"],["Devil May Cry (ps2-web-dmc)",null,"https://github.com/Brando-karim/ps2-web-dmc"],["Dewdrop Dynasty",null,"https://github.com/obsidian-ports/Dewdrop-Dynasty"],["Diablo","https://d07riv.github.io/diabloweb/","https://github.com/d07RiV/diabloweb"],["Diablo (diablo_web)","https://johnimril.github.io/diablo_web/","https://github.com/johnimril/diablo_web"],["Diablo II: Lord of Destruction (D2-Web)","https://diablo2.virtastic.app/","https://github.com/Virtastic/d2-web"],["Dice a Million","https://gn-math.dev/?id=759","https://github.com/NotRexed/Unblocked-Games/tree/main/diceamillion"],["Dictators:No Peace Countryballs",null,"https://github.com/web-ports/countryballsdictator"],["Diddy Kong Racing (Golden Balloon)","https://akratch.github.io/golden-balloon/","https://github.com/akratch/goldenballoon"],["A Difficult Game About Climbing","https://gn-math.dev/?id=672","https://github.com/web-ports/adgac"],["Digital Logic Simulator",null,"https://github.com/thecheetoman/DLSWebPort"],["Do NOT Take This Cat Home","https://gn-math.github.io/web-port/donottakethiscathome/","https://github.com/genizy/web-port/tree/main/donottakethiscathome"],["DOKDO (restoration)","https://dokdo.online","https://github.com/ykondrashyn/dokdo.online"],["Doki Doki Literature Club",null,"https://github.com/EmeraldGreenR/EmeraldGreenR.github.io"],["Doki Doki Literature Club Plus!","https://selenite.cc/resources/semag/ddlcplus/index.html",null],["Don't Bite Me Bro",null,"https://github.com/usheje883-maker/Dont-Bite-Me-Bro-Web"],["Don't Sleep With The Fishes",null,"https://github.com/AlexBoops/DSWTF-Port"],["Donald Duck: Goin' Quackers (n64hub recomp)",null,"https://github.com/n64hub/donald-duck-goin-quackers-recomp"],["Doom","https://raz0red.github.io/webprboom/","https://github.com/midzer/chocolate-doom"],["Doom (cssDOOM)",null,"https://github.com/NielsLeenheer/cssDOOM"],["Doom (doom-wasm)",null,"https://github.com/cloudflare/doom-wasm"],["Doom (doom.wasm)",null,"https://github.com/jacobenget/doom.wasm"],["Doom (joeheyming, classic and mods)","https://joeheyming.github.io/doom/",null],["Doom (wasm-doom)",null,"https://github.com/lazarv/wasm-doom"],["Doom (wasmdoom)",null,"https://github.com/theMagicalKarp/wasmdoom"],["Doom (wasoom)","https://wasoom.pages.dev/","https://github.com/koimilk/wasoom"],["Doom (WebDOOM)","https://ustymukhman.github.io/WebDOOM/public/","https://github.com/UstymUkhman/WebDOOM"],["Doom / Doom II / Heretic (EDGE-classic)",null,"https://github.com/edge-classic/EDGE-classic"],["Doom 3","https://gn-math.dev/?id=626","https://github.com/web-ports/doom-3"],["Doom 3 (D3Wasm)","https://recompiledgames.com/doom-3-recompiled",null],["Doom 3 Demo","https://wasm.continuation-labs.com/d3demo/",null],["Doom 3: BFG Edition (D3BFG.js)",null,"https://github.com/Hiten-dev-ai/D3BFG.js"],["Doom Engine",null,"https://github.com/GMH-Code/Dwasm"],["DOOM I & II","https://rgc.zone/ports/truedoom/index.html",null],["Doom Multiplayer","https://silentspacemarine.com/",null],["DOS demoscene productions (demoscene-recomp)",null,"https://github.com/treylorswift/demoscene-recomp"],["Dos.Zone","https://dos.zone",null],["Downhill Domination","https://downhilldomination.online/",null],["Downhill Domination (downhill-revived)",null,"https://github.com/skuza-oss/downhill-revived"],["Downhill Domination (downhill-web)",null,"https://github.com/ekansh28/downhill-web"],["Dragon Ball Z: Budokai 2","https://budokai2onlline.cc/",null],["Dragon Ball Z: Budokai 3","https://dragonballbudokai3.online/",null],["Dragon Ball Z: Budokai Tenkaichi 2","https://dragonballbt2.online/",null],["Dragon Ball Z: Budokai Tenkaichi 3","https://dragonballbt3.online/",null],["Dragon Ball Z: Budokai Tenkaichi 3 (Tenkaichi3Decomp, WASM)",null,"https://github.com/BeeLTL/Tenkaichi3Decomp"],["Drakan: The Ancients' Gates (Drakan2PC)","https://christophervr.github.io/Drakan2PC/","https://github.com/ChristopherVR/Drakan2PC"],["Drascula: The Vampire Strikes Back (ScummWeb)","https://scummweb.tsilva.eu/drascula-the-vampire-strikes-back",null],["Dressing Room",null,null],["Duck Game (WebAssembly port)",null,"https://github.com/im-nassinger/duck-game"],["Duck Life 8","https://gn-math.dev/?id=695",null],["Duck Life Adventure",null,"https://github.com/aukak/duck-life-adventure"],["Duck Life Adventure (2)",null,"https://github.com/web-ports/duck-8"],["Dude Simulator","https://dude-simulator-webgl.netlify.app/",null],["Dude Simulator 2","https://dude-sim-2-webgl-ported-by-carteryes.netlify.app/",null],["Duke Caribbean: Life's a Beach","https://rgc.zone/ports/8779-duke-vacation/run.html",null],["Duke It Out in D.C.","https://rgc.zone/ports/8780-duke-dc/run.html",null],["Duke Nukem 3D","https://midzer.de/wasm/duke3d/","https://github.com/midzer/BelgianChocolateDuke3D"],["Duke Nukem 3D (eduke32-wasm)","https://digitalcybersoft.github.io/eduke32-wasm/","https://github.com/digitalcybersoft/eduke32-wasm"],["Duke Nukem 3D TG","https://rgc.zone/ports/duke3dtg/index.html",null],["Duke Nukem II",null,"https://github.com/lethal-guitar/RigelEngine"],["Duke: Nuclear Winter","https://rgc.zone/ports/8781-duke-nwinter/run.html",null],["Dumb Ways to Die (v1.6)",null,"https://github.com/web-ports/dumb-ways-to-die"],["Dune II","https://dune2js.com/","https://github.com/midzer/OpenDUNE"],["DUNE II TG","https://rgc.zone/ports/dune2tg/index.html",null],["Dungeon Keeper","https://dk-browser.tiiny.site/",null],["Dungeon Rush",null,"https://github.com/midzer/DungeonRush"],["EA Sports Cricket 07","https://cricket07.dhaiwat.com/","https://github.com/Dhaiwat10/cricket07-browser"],["Eaglercraft","https://rgc.zone/ports/eaglecarftg/index.html",null],["Egg Fried Rice",null,null],["The Elder Scrolls III: Morrowind (OpenMW)","https://morrowind.virtastic.app/","https://github.com/Virtastic/openmw-web"],["Empty Clip",null,"https://github.com/midzer/empty-clip"],["Endacopia",null,"https://github.com/linkawaken1979-alt/endacopia-"],["Endoparasitic","https://gn-math.dev/?id=286",null],["Endoparasitic 2","https://gn-math.dev/?id=724",null],["F-Zero X (n64hub recomp)",null,"https://github.com/n64hub/f-zero-x-recomp"],["F1 Race (MTK)","https://lab.exlmoto.ru/f1/","https://github.com/EXL/F1-Race"],["Fade To Black",null,"https://github.com/midzer/f2bgl"],["Fallout","https://gn-math.dev/?id=585","https://github.com/midzer/fallout1-ce"],["Fallout 2",null,"https://github.com/roginvs/fallout2-ce"],["Fallout: Nevada / Sonora","https://fallout-nevada.ru/#/en",null],["Fallout: New Vegas (fnv-web-recomp)","https://falloutnewvegasweb.com/","https://github.com/SgtMetz/fnv-web-recomp"],["Faster Than Light: Demo","https://rgc.zone/ports/ftldemo/index.html",null],["Fatal Racing","https://play.fatal.racing/",null],["Fear & Hunger","https://gn-math.dev/?id=706",null],["Fear & Hunger 2: Termina","https://gn-math.dev/?id=794",null],["Fear and Hunger",null,"https://github.com/web-ports/fear-and-hunger"],["Fear and Hunger 2: Termina",null,"https://github.com/web-ports/fear-and-hunger-2"],["Fears To Fathom","https://gn-math.github.io/web-port/fears-to-fathom/","https://github.com/genizy/web-port/tree/main/fears-to-fathom"],["Fears to Fathom: Home Alone","https://gn-math.dev/?id=460","https://github.com/slqntdevss/FTFHAPort"],["Feed & Grow Fish","https://reeyukifish.pages.dev/","https://github.com/Reeyuki/FeedAndGrowFishPort"],["Feed the Pit",null,"https://github.com/idkdl/feedthepit-src"],["FEZ","https://wasm.rip/files/FEZ/fez.html","https://github.com/degloved-net/FEZ"],["FIFA 10 (PSP)","https://fifa10.website/",null],["FIFA 11","https://fifa11.online/",null],["FIFA 12","https://fifa12.online/",null],["FIFA 13","https://fifa13.online/",null],["FIFA 14 (PSP)","https://fifa14.online/",null],["FIFA Street","https://fifastreet.online/",null],["FIFA Street 2","https://fifastreet2.fun/",null],["Fih","https://gn-math.dev/?id=797","https://github.com/InsayneBoko/fih-port/tree/main/port"],["FISH","https://gn-math.dev/?id=761","https://github.com/web-ports/fish"],["Five Nighs at Epstein's",null,"https://github.com/web-ports/fnae"],["Five Nights at Candy's","https://gn-math.dev/?id=503",null],["Five Nights at Candy's 1",null,"https://github.com/web-ports/fnac/tree/main/1"],["Five Nights at Candy's 2","https://gn-math.dev/?id=504","https://github.com/web-ports/fnac/tree/main/2"],["Five Nights at Epstein's","https://gn-math.dev/?id=710","https://github.com/web-ports/fnae"],["Five Nights at Freddy's","https://gn-math.dev/?id=38",null],["Five Nights at Freddy's 1",null,"https://github.com/irv77/hd_fnaf/tree/main/1"],["Five Nights at Freddy's 2","https://gn-math.dev/?id=39","https://github.com/irv77/hd_fnaf/tree/main/2"],["Five Nights at Freddy's 3","https://gn-math.dev/?id=40","https://github.com/irv77/hd_fnaf/tree/main/3"],["Five Nights at Freddy's 4","https://gn-math.dev/?id=41","https://github.com/irv77/hd_fnaf/tree/main/4"],["Five Nights at Freddy's 4: Halloween","https://gn-math.dev/?id=428",null],["Five Nights at Freddy's 4: Halloween Edition",null,"https://github.com/genizy/fnaf/tree/main/4-halloween"],["Five Nights at Freddy's World: Refreshed","https://gn-math.dev/?id=704","https://github.com/web-ports/fnaf-world-refreshed"],["Five Nights at Freddy's: Pizza Simulator","https://gn-math.dev/?id=191",null],["Five Nights at Freddy's: Pizzeria Simulator",null,"https://github.com/irv77/hd_fnaf/tree/main/ps"],["Five Nights at Freddy's: Sister Location","https://gn-math.dev/?id=185","https://github.com/irv77/hd_fnaf/tree/main/sl"],["Five Nights at Freddy's: Ultimate Custom Night","https://gn-math.dev/?id=192","https://github.com/irv77/hd_fnaf/tree/main/ucn"],["Five Nights at Freddy's: World","https://gn-math.dev/?id=190","https://github.com/irv77/hd_fnaf/tree/main/w"],["Five Nights at Frickbear's 3","https://gn-math.dev/?id=813","https://github.com/Reeyuki/frickbears3port/"],["Five Nights at Last Breath","https://gn-math.dev/?id=750",null],["Five Nights in Anime 3D",null,"https://github.com/Reeyuki/fivenightsanime3dport"],["Flare",null,"https://github.com/midzer/flare-engine"],["Flashback",null,"https://github.com/midzer/reminiscence"],["FlatOut 2 (dezm0n web port)","https://itch.io/event/46481004",null],["Flight of the Amazon Queen (ScummWeb)","https://scummweb.tsilva.eu/#game-flight-of-the-amazon-queen",null],["Flying Gorilla",null,"https://github.com/web-ports/flying-gorilla"],["Flying Gorilla 3D","https://gn-math.dev/?id=763","https://github.com/web-ports/flying-gorilla"],["FNAF","https://gn-math.github.io/web-port/fnaf/","https://github.com/genizy/web-port/tree/main/fnaf"],["FNAF",null,"https://github.com/genizy/fnaf/tree/main/1"],["FNAF: Blood & Gears (Demo)",null,"https://github.com/UMMMM-GUYSSS/Five-Nights-at-Freddy-s-Blood---Gears"],["Formula One 06","https://f12006.online/",null],["Free Heroes of Might and Magic II (web)",null,"https://github.com/Carter54git/fheroes-1.1.17-ported-to-web"],["Freeciv (Freeciv-web)","https://webciv.org/webclient/?action=new&type=singleplayer",null],["Freegemas",null,"https://github.com/midzer/freegemas"],["Freegish",null,"https://github.com/midzer/freegish"],["Freeserf",null,"https://github.com/midzer/freeserf"],["FreeSiege",null,"https://github.com/midzer/freesiege"],["Fundamental Paper Novel","https://gn-math.dev/?id=746","https://github.com/bubbls/ports/tree/main/fpn-FULLY_RECRAFTED-web"],["Fungiman",null,"https://github.com/GrassPorts/Fungiman"],["Fused 240","https://gn-math.dev/?id=722",null],["Gabriel's Awesome Schoolhouse",null,"https://github.com/web-ports/gash"],["Gabriel's Awesome Schoolhouse (GASH)","https://gn-math.dev/?id=784",null],["Gamble with Your Friends",null,"https://github.com/Camzzz-vrgt/gamble-with-your-friends-web/tree/main/game"],["Gambonanza",null,"https://github.com/AlexBoops/Gambonanza-Port"],["A Game about Feeding a Black Hole",null,"https://github.com/GrassPorts/A-Game-About-Feeding-A-Black-Hole"],["GameMaker games (gm-recomp, browser)",null,"https://github.com/KurathSec/gm-recomp"],["Gang Beasts",null,"https://github.com/jmhq20120212-cmd/GangBeast-WebPort"],["gays dot' studio",null,"https://github.com/gays-studio"],["Genital Jousting",null,"https://github.com/degloved-net/genital-jousting"],["Geometry Dash","https://gn-math.dev/?id=785","https://github.com/AlexBoops/geometry-dash-webport"],["Geometry Dash (Web Dashers)","https://web-dashers.github.io/","https://github.com/web-dashers/web-dashers.github.io"],["Getting Over It","https://gn-math.github.io/web-port/getting-over-it/","https://github.com/genizy/web-port/tree/main/getting-over-it"],["Getting Over It with Bennett Foddy","https://gn-math.dev/?id=557",null],["Gilbert and the doors",null,"https://github.com/midzer/gilbert"],["GMH-Code",null,"https://github.com/GMH-Code"],["GO TO BED",null,null],["God of War II / Gran Turismo 4 (PS2 Web Recomp)",null,"https://github.com/snuri00/ps2-web-recomp"],["God of War: Chains of Olympus","https://godofwarchains.online/",null],["God of War: Chains of Olympus / Ghost of Sparta (PSP Web Recomp)",null,"https://github.com/snuri00/psp-web-recomp"],["God of War: Ghost of Sparta","https://godofwarsparta.online/",null],["Gold Miner Special Edition","https://wasmarcade.app/play/gold-miner",null],["Golden Sun","https://shmargus.github.io/GSRecomp/","https://github.com/shmargus/GSRecomp"],["GoldenEye 007 (GoldenWeb64)","https://goldenweb64.com/",null],["Gorilla Tag","https://gn-math.dev/?id=668","https://github.com/web-ports/gorilla-tag"],["Gorilla Tag (2)",null,"https://github.com/aukak/gorrila-tag"],["Gran Turismo 2","https://ydubr-gt2.surge.sh/",null],["Gran Turismo 2 (gt-2-pc)",null,"https://github.com/dubrovskiy-yevhen-stakelogic/gt-2-pc"],["Gran Turismo 4","https://granturismo4.online/",null],["Grand Theft Auto 2","https://m1stermo.github.io/gta2/","https://github.com/M1sterMo/gta2-browser"],["Grand Theft Auto III (wasm.rip)","https://wasm.rip/files/gta3/index.html",null],["Grand Theft Auto III Online (quenq)","https://iii.quenq.com/",null],["Grand Theft Auto IV (gta4-web)",null,"https://github.com/itzzace/gta4-web"],["Grand Theft Auto: Chinatown Wars (PPSSPP Web)","https://gta-chinatown-wars.pages.dev/","https://github.com/root-hunter/ppsspp-web"],["Grand Theft Auto: Vice City (quenq)","https://vc.quenq.com/",null],["Grand Theft Auto: Vice City (revc.wasm.ltd)","https://revc.wasm.ltd/","https://github.com/origami-ltd/wasm-revc"],["Granny","https://gn-math.dev/?id=90","https://github.com/web-ports/granny"],["Granny (2)",null,"https://github.com/aukak/Granny"],["Granny (3)",null,"https://github.com/woahhcrackers/GrannyWeb"],["Granny 2",null,"https://github.com/web-ports/granny-2"],["Granny 3",null,"https://github.com/mynamescrax/gamesforaetheris/tree/main/granny3"],["Gravity Circuit",null,"https://github.com/TheChillVideoGameNerd/Gravity-Circuit-Web-Port"],["Gravity Defied (gravity-defied-web)","https://litomore.github.io/gravity-defied-web/","https://github.com/LitoMore/gravity-defied-web"],["GTA 3",null,"https://github.com/larpinguser/HelloWorldScriptBasicFunctionCSharpIsCool/"],["GTA 3 (2)",null,"https://github.com/woahhcrackers/GTA3Web"],["GTA 3 (3)","https://wasmarcade.com/gta3",null],["GTA V","https://web.archive.org/web/20261006055917/https://playgta5.com/",null],["GTA V (Grand-V)",null,"https://github.com/SebasKitten/Grand-V"],["GTA V (GrandV V2)","https://v2.fiveplay.lol/launcher.html","https://github.com/gudeakhil/playgta5v2"],["GTA V (gta5-web, WebGPU)","https://hammadshakeelai.github.io/gta5-web/","https://github.com/hammadshakeelai/gta5-web"],["GTA V (playgta5-to-rust)","https://gta.caruno.wtf:8443/","https://github.com/caruno-git/playgta5-to-rust"],["GTA Vice City",null,"https://github.com/Lolendor/reVCDOS"],["GTA Vice City (2)","https://joncodeofficial.github.io/gta-vice-city-wasm/","https://github.com/joncodeofficial/gta-vice-city-wasm"],["GTA: Vice City (projetoescola)","https://gtavc.projetoescola.com/","https://github.com/ezekky/gta-vice-city-online-webassembly"],["Guitar Hero III (Browser Edition)","https://gh3.thediaryofchris.net/index.html",null],["Half Life","https://gn-math.dev/?id=262",null],["Half Life 2","https://hl2.slqnt.dev/","https://github.com/AlexBoops/half-life-2-port"],["Half Life: Opposing Force","https://gn-math.dev/?id=693",null],["Half-Life and Counter-Strike 1.6 (WebXash)","https://x8bitrain.github.io/webXash/","https://github.com/x8bitrain/webXash"],["Halo: Combat Evolved","https://mitchellhynes.com/halo/halo.html","https://github.com/ecumene/web-halo"],["Halo: Combat Evolved (Combat Lab)","https://mitchellhynes.com/combat-lab/",null],["Halo: Combat Evolved (OpenCE)","https://opencommunityedition.com/","https://github.com/OpenCommunityEdition/OpenCE"],["Halo: Combat Evolved Mobile","https://hcemobile.com/",null],["Happy Room","https://wasm.rip/files/happy-room/index.html","https://github.com/degloved-net/happy-room"],["Happy Sheepies","https://gn-math.github.io/web-port/happy-sheepies/","https://github.com/genizy/web-port/tree/main/happy-sheepies"],["Happy Wheels",null,"https://github.com/Nawsif/host/tree/main/HappyWheels"],["Hard Truck / Hard Truck 2 (Дальнобойщики 1 и 2)","https://rgc.zone/ports/hardtruck/index.html",null],["Harry Potter and the Chamber of Secrets","https://hp2.mihaimateias.com/","https://github.com/cefege/harry-potter-2-chamber-of-secrets-pc"],["Haxima",null,"https://github.com/midzer/nazghul"],["HAYAI",null,"https://github.com/degloved-net/HAYAI"],["Haze (haze-recomp)",null,"https://github.com/zdiemer/haze-recomp"],["Heart of Darkness",null,"https://github.com/midzer/hode"],["Hedgewars (WebWars)",null,"https://github.com/apmlabs/webwars"],["Helltaker","https://gn-math.dev/?id=790","https://github.com/larpinguser/Helltaker-Web/tree/main/helltakerweb"],["Helltaker (2)","https://wasm.rip/files/Helltaker/helltaker.html","https://github.com/reeyuki/Helltaker-Webport"],["Help Hannah's Horse",null,"https://github.com/midzer/hannah"],["HERETIC / HEXEN","https://rgc.zone/ports/heretichex/index.html",null],["Heroes of Might and magic 3 for Web",null,"https://github.com/caiiiycuk/vcmi-wasm"],["Heroes of Might and Magic II","https://midzer.de/wasm/heroes2/","https://github.com/midzer/fheroes2"],["Heroes of Might and Magic II (fheroes2, rgc.zone)","https://rgc.zone/ports/fheroes2weblast/index.html",null],["Hexen II","https://dos.zone/hexen-2-fteqw/",null],["Hexen II (Hexenwail)","https://hexenwail.github.io/hexenwail/",null],["Hill Climb Racing",null,"https://github.com/NotRexed/HillClimbRacingPort"],["Hollow Knight","https://gn-math.dev/?id=468","https://github.com/aukak/hollow-knight"],["Hollow Knight (2)",null,"https://github.com/NOTAHACKER9999/Hollow-Knight-Port"],["Hollow Knight (dezm0n web port)","https://dezm0n.itch.io/hollow-knight-web-port",null],["Hollow Knight: Silksong","https://gn-math.dev/?id=771","https://github.com/web-ports/hollow-knight-silksong"],["Hollow Knight: Silksong (2)",null,"https://github.com/webporting/Hollow-Knight-Silksong"],["Homeworld","https://gardens-of-kadesh.gitlab.io/gardens-of-kadesh/","https://github.com/GardensOfKadesh/Homeworld"],["Horse Magnifier",null,"https://github.com/AlexBoops/horse-magnifier-port"],["Horsey Game",null,"https://github.com/woahhcrackers/HorseyGameWeb"],["Hot Shots Tennis (OpenTennis)","https://opentennis.dev/","https://github.com/FIZL0/opentennis"],["Hotline Miami","https://gn-math.github.io/web-port/hotline-miami/","https://github.com/genizy/web-port/tree/main/hotline-miami"],["The House of the Dead (PC 1998, recomp web)",null,"https://github.com/un4ckn0wl3z/house-of-the-dead-recomp-web"],["How to Fish","https://wasm.rip/files/HowToFish/HowToFish.html","https://github.com/NotRexed/HowToFishPort"],["Hugo (hugo_js)",null,"https://github.com/cyxx/hugo_js"],["Human Expenditure Program","https://gn-math.github.io/web-port/human-expenditure-program/","https://github.com/genizy/web-port/tree/main/human-expenditure-program"],["Hurrican",null,"https://github.com/midzer/hurrican"],["HYDROGEN",null,"https://github.com/BestSpark687090/bestspark-web-ports/tree/main/hydrogen"],["I Can't Believe It's Not Sonic 1","https://jojudge.com/ICBINS1/",null],["I Spoke to God",null,"https://github.com/degloved-net/i-spoke-to-god"],["I Wanna Be The Guy","https://gn-math.dev/?id=834",null],["Ignition",null,"https://github.com/xesf/ignition"],["In Stars and Time","https://gn-math.dev/?id=667","https://github.com/Reeyuki/InStarsAndTime"],["In Stars and Time (2)",null,"https://github.com/web-ports/in-stars-and-time"],["Incubation: Time Is Running Out (Remake)",null,"https://github.com/n0madic/IncubationRemake"],["Inscryption","https://wasm.rip/files/inscryption/index.html","https://github.com/Reeyuki/InscryptionWebport"],["Iron Lung","https://gn-math.dev/?id=705","https://github.com/web-ports/iron-lung"],["IS THAT A GUBBY?",null,"https://github.com/xxskidxx69420-ai/isthatagubbywebportheh"],["Jagged Alliance 2",null,"https://github.com/midzer/ja2-stracciatella"],["Jak and Daxter: The Lost Frontier","https://jakdaxterlostfrontier.online/",null],["Jazz Jackrabbit",null,"https://github.com/midzer/openjazz"],["Jazz Jackrabbit 2",null,"https://github.com/deathkiller/jazz2-native"],["Jeffrey Epstein Basics In Education And Kidnapping","https://gn-math.dev/?id=751","https://github.com/bubbls/ports/tree/main/jeffrey-epsteins-basics-in-education-and-kidnapping"],["Jelly Drift","https://gn-math.github.io/web-port/jelly-drift/","https://github.com/genizy/web-port/tree/main/jelly-drift"],["JENNY",null,"https://github.com/MRVAPORWAVE25/JennyGameFiles"],["JS-DOS",null,"https://github.com/js-dos/"],["Jumbo Mario","https://gn-math.dev/?id=712",null],["Jump 'n Bump",null,"https://github.com/midzer/jumpnbump"],["Just Shapes & Beats","https://gn-math.dev/?id=826","https://github.com/web-ports/jsab"],["Karlson","https://gn-math.github.io/web-port/karlson/","https://github.com/genizy/web-port/tree/main/karlson"],["Karlson (2)",null,"https://github.com/thecheetoman/KarlsonWebPort"],["Karlson 2D","https://truffled.lol/games/karlson2d/truffledkarlson2d/index.html",null],["Keep Talking and Nobody Explodes",null,"https://github.com/squidward5/ktane-webport"],["Kerbal Space Program",null,"https://github.com/woahhcrackers/KSPWeb"],["Kill the Ice Age Baby Adventure 2",null,"https://github.com/SomeRandomFella/kill-ice-age-baby-adventure-2-"],["Kindergarten","https://gn-math.dev/?id=445",null],["Kindergarten 1 & 2","https://gn-math.github.io/web-port/kindergarten/","https://github.com/genizy/web-port/tree/main/kindergarten"],["Kindergarten 2","https://gn-math.dev/?id=446",null],["Kindergarten 3","https://gn-math.dev/?id=501","https://github.com/slqntdevss/Kindergarten3Port"],["Kingdom Hearts: Chain of Memories (ReKHCoM, web alpha)",null,"https://github.com/MatyMeatBoy/ReKHCom"],["Kingdom Hearts: Chain of Memories (RepliCoM)","https://replicom.dev/",null],["Kingdom Rush (Flash Edition)","https://wasmarcade.app/play/kingdom-rush",null],["KinitoPET",null,"https://github.com/web-ports/kinito-pet"],["Kino der Toten","http://kino-der-toten.pages.dev","https://github.com/GoofyAhhBro69420/COD-ZOMBIES"],["Kino der Toten (GoofyAhhBro69420 mirror)","https://goofyahhbro69420.github.io/COD-ZOMBIES/",null],["Kino der Toten (theeagler1234 mirror)","https://theeagler1234-alt.github.io/kino-der-toten/",null],["Kirby & The Amazing Mirror (katam-port)","https://sh1ftmaker.github.io/katam-port/","https://github.com/sh1ftmaker/katam-port"],["Kirby ~ Soft & Wet","https://gn-math.dev/?id=692",null],["Kirby ~ Soft and Wet",null,"https://github.com/web-ports/soft-and-wet"],["KisakCOD",null,"https://github.com/slqntdevss/kisakcod-port"],["Klifur",null,"https://github.com/aukak/klifur"],["koi/_flixel","https://oldgrounds.xyz/",null],["La Madriguera",null,"https://github.com/web-ports/la-madriguera"],["La Madriguera (Lazy Bear Game)","https://gn-math.dev/?id=843",null],["Lacey's Flash Games","https://gn-math.github.io/web-port/laceys-flash-games/","https://github.com/genizy/web-port/tree/main/lacysflashgames"],["LBreakoutHD",null,"https://github.com/midzer/lbreakouthd"],["Legend of Legaia","https://andrewaltimit.github.io/legend-of-legaia-re/play.html","https://github.com/AndrewAltimit/legend-of-legaia-re"],["The Legend of Sword and Fairy (SDLPAL)",null,"https://github.com/sdlpal/sdlpal"],["The Legend of Sword and Fairy (type-pal)",null,"https://github.com/IllegalCreed/type-pal"],["The Legend of Zelda (ZQuest Classic)",null,"https://github.com/ZQuestClassic/ZQuestClassic"],["The Legend of Zelda - A Link to the Past",null,"https://github.com/midzer/zelda3"],["The Legend of Zelda - A Link to the Past (lttp, WebGL remake)",null,"https://github.com/englercj/lttp"],["The Legend of Zelda: Link's Awakening DX (linksawakening-portable)",null,"https://github.com/sp00nznet/linksawakening-portable"],["The Legend of Zelda: Twilight Princess (Dusklight)","https://dusklight.pages.dev/","https://github.com/caribbeansc/dusklight"],["LEGO Island","https://isle.pizza/","https://github.com/isledecomp/isle.pizza"],["LEGO Racers","https://steponit.online/",null],["LEGOLAND (1999)",null,"https://github.com/facundosterzerforino/legoland-port"],["Lemmings (ohmylemmings)",null,"https://github.com/edwardkim/ohmylemmings"],["Lenin: First Blood","https://rgc.zone/ports/8770-blood-lenin/run.html",null],["Lethal Ape","https://gn-math.dev/?id=793","https://github.com/web-ports/lethal-ape"],["Lethal Company","https://wasm.rip/files/lethal/index.html",null],["Li-Ri",null,"https://github.com/midzer/Li-Ri"],["Limbo","https://truffled.lol/games/limbo/index.html",null],["Lionheart (lionheart-web)",null,"https://github.com/ray77/lionheart-web"],["Liquidator 3D","https://rgc.zone/ports/8778-liquidator/run.html",null],["Little Big Adventure 2",null,"https://github.com/LBALab/lba2remake"],["Lobotomy Corporation","https://wasm.rip/files/lob-corp/index.html","https://github.com/Reeyuki/lobcorp"],["Look Outside","https://gn-math.dev/?id=649","https://github.com/web-ports/look-outside"],["Lords of the Realm II","https://1lk.github.io/Lords2web/","https://github.com/1lk/Lords2web"],["Luanti (Minetest)","https://wasmga.me/games/luanti","https://github.com/wasmga-me/luanti-wasm"],["Lugaru","https://loganwalkerdev.github.io/lugaru-web/","https://github.com/loganwalkerdev/lugaru-web"],["Luigi's Picture Poker","https://marcy4000.itch.io/luigis-picture-poker",null],["Madden NFL 08","https://maddennfl08.online/",null],["Magic Sushi",null,"https://github.com/EXL/Magic-Sushi"],["Magic Tower: 50 Floors","https://wasmarcade.app/play/magic-tower",null],["The Man From the Window","https://gn-math.github.io/web-port/the-man-in-the-window/","https://github.com/genizy/web-port/tree/main/the-man-in-the-window"],["The Man From the Window 2","https://wasm.rip/files/MFDW2/index.html","https://github.com/wasm-rip/the-man-from-the-window-2-web"],["The Man In The Window","https://gn-math.dev/?id=459",null],["Marathon 2 / Infinity (AlephWeb)",null,"https://github.com/TotallyGatsby/AlephWeb"],["Marble Blast Gold & Marble Blast Platinum",null,"https://github.com/Vanilagy/MarbleBlast"],["Mario Kart Wii (WebCompiled)",null,"https://github.com/dynamiteswag81/webcompiled"],["Mario Party (n64hub recomp)",null,"https://github.com/n64hub/mario-party-recomp"],["Mario Party 2 (n64hub recomp)",null,"https://github.com/n64hub/mario-party-2-recomp"],["Mario Party 3 (n64hub recomp)",null,"https://github.com/n64hub/mario-party-3-recomp"],["Mario Party 4 (PC Download Play Edition)",null,"https://github.com/wigwoo1/Mario-Party-4-PC-Download-Play-Edition"],["Marvel vs. Capcom 2","https://marvelvscapcom2.online/",null],["Master of Defence","https://nomadic-ua.itch.io/master-of-defence",null],["Master of Orion",null,"https://github.com/midzer/1oom"],["The Math Is Leaking",null,"https://github.com/reeyuki/themathisleaking"],["MechCommander 2 (mc2-rust)","https://justinbukoski.github.io/mc2-rust/","https://github.com/justinbukoski/mc2-rust"],["Medabots AX","https://medabots-ax.meme.ar/",null],["Mega Mario",null,"https://github.com/midzer/megamario"],["Meowdoku!",null,"https://github.com/c00lkiddtech/md-"],["The Message From Deep Space",null,"https://github.com/dashiellbenton/ports/tree/main/tmfds"],["Metal Gear Solid (Shadow Moses Web)","https://mgs.ravenlight.net/","https://github.com/vjravenlight/shadow-moses-web"],["Meteor 60 Seconds",null,"https://github.com/ThatWirdGuy/Meteor-60-Seconds-Web"],["Micro Machines (scale-miniatures)",null,"https://github.com/hivvu/scale-miniatures"],["Midnight Club 3: DUB Edition","https://midnighhtclub3.online/",null],["Midnight Club 3: DUB Edition (mc3-web)",null,"https://github.com/LeandroDettmer/mc3-web"],["Midnight Shift","https://gn-math.dev/?id=658",null],["Milk inside a bag of milk inside a bag of milk","https://gn-math.dev/?id=650","https://github.com/web-ports/milk-bag-games/tree/main/inside"],["Milk outside a bag of milk outside a bag of milk","https://gn-math.dev/?id=651","https://github.com/web-ports/milk-bag-games/tree/main/outside"],["Milkman Karlson","https://gn-math.github.io/web-port/milkman-karlson/","https://github.com/genizy/web-port/tree/main/milkman-karlson"],["Milkman Karlson (2)",null,"https://github.com/aukak/gameports/tree/main/milkman%20karlson"],["Mindustry",null,"https://github.com/khoichon/mindustry-web"],["Mindwave","https://gn-math.dev/?id=648",null],["Mine Bombers (minebombers-reloaded)",null,"https://github.com/jeiel85/minebombers-reloaded"],["Minecraft 0.6.1","https://rgc.zone/ports/minecraft061/index.html",null],["Minecraft 1.8.8 (EaglercraftX)","https://wasmarcade.com/minecraft",null],["Minecraft 4k",null,"https://github.com/midzer/m4kc"],["Minecraft Classic (ClassiCube)",null,"https://github.com/ClassiCube/ClassiCube"],["Minecraft LCE",null,null],["Minecraft Pocket Edition","https://gn-math.dev/?id=754",null],["Minecraft Story Mode","https://mcsm-web.pages.dev/",null],["Minesweeper Plus","https://gn-math.github.io/web-port/minesweeperplus/","https://github.com/genizy/web-port/tree/main/minesweeperplus"],["Mini DayZ","https://rgc.zone/ports/minidayz/index.html",null],["MiniSlug",null,"https://github.com/midzer/minislug"],["Mirror's Edge (Glassline)",null,"https://github.com/MoonCellar-Team/Glassline"],["MiSide","https://gn-math.dev/?id=814","https://github.com/web-ports/miside/"],["MiSide (2)","https://wasm.rip/files/miside/miside.html","https://github.com/woahhcrackers/MiSideWeb"],["Mobile Suit Gundam: Federation vs. Zeon DX (re-gvs-fvzdx)","https://sennett-lau.github.io/re-gvs-fvzdx/","https://github.com/sennett-lau/re-gvs-fvzdx"],["Mobile Suit Gundam: Gundam vs. Zeta Gundam (re-gvs-gvzg)",null,"https://github.com/sennett-lau/re-gvs-gvzg"],["Monster Hunter Freedom Unite","https://mhfu.online/",null],["Moon (Black Ops Zombies, vel.gg)","https://vel.gg/bo1z/moon",null],["Moon (Zombies)","http://moon-zombies.pages.dev",null],["Mortal Kombat: Armageddon","https://mka.lauta.site/",null],["Mortal Kombat: Shaolin Monks","https://mortalkombatsm.online/",null],["Motocross Madness 2 (mcm2-web)","https://rzrabbi.github.io/mcm2-web/","https://github.com/rzrabbi/mcm2-web"],["Muck (WIP)",null,"https://github.com/gays-studio/muck-webport"],["Muddy Heights",null,"https://github.com/gabadagabadgoo/morbidy-obese-chickens"],["MVP Baseball 2005",null,"https://github.com/ptitty12/mvp2005-decomp"],["My Baby Talking Hippo",null,"https://github.com/web-ports/talking-hippo"],["My Dictator Stalin Can't Be This Cute ?!",null,"https://github.com/degloved-net/my-dictator-stalin-cant-be-this-cute"],["My Femboy Roommate",null,"http://github.com/gays-studio/mfr-webport"],["My Femboy Roommate (2)",null,"https://github.com/Cute-Orange-Cat/MFR/tree/main"],["My Furry Protogen",null,"https://github.com/Atreyu802/My-Furry-Protogen-Web-Port"],["My Talking Baby Hippo","https://gn-math.dev/?id=840",null],["Nacht der Untoten","https://zombies.bitcoinsapi.com/",null],["Nacht der Untoten (2)","https://zombies.concentric.live/",null],["NAM / Napalm","https://rgc.zone/ports/namweb/run.html",null],["Naruto Shippuden: Ultimate Ninja 5","https://narutoshippuden5.online/",null],["Naruto Shippuden: Ultimate Ninja Impact","https://narutoimpact.online/",null],["NBA 2K12","https://nba2k12.online/",null],["NBA Street V3","https://nbastreet3.online/","https://github.com/recomp-code/street-recomp-v3"],["NBlood","https://rgc.zone/ports/nbloodweb/run.html",null],["NCAA Football 10 (PSP Recomp)","https://awest813.github.io/NCAA-10-PSP-Recomp/","https://github.com/awest813/NCAA-10-PSP-Recomp"],["Need for Speed III: Hot Pursuit (nfs3-web)","https://nfs3.xyz/","https://github.com/mrz944/nfs3-web"],["Need for Speed: Carbon (online multiplayer)","https://nfscrb.xyz/",null],["Need for Speed: Most Wanted (2005) (dezm0n web port)","https://dezm0n.itch.io/nfs-most-wanted-web-port",null],["Need for Speed: Most Wanted (2005) (NFSMW Online web)","https://web.nfsmwo.com/",null],["Need for Speed: Most Wanted (2005) (NFSMW Online)","https://nfsmwonline.com",null],["Need for Speed: Most Wanted (nfsmw-webport)","https://iker3329.github.io/nfsmw-webport/","https://github.com/Iker3329/nfsmw-webport"],["Need for Speed: ProStreet (NFSProStreet_online)",null,"https://github.com/uvindusl/NFSProStreet_online"],["Need for Speed: Underground (nfsu1web)",null,"https://github.com/yurasmetanka/nfsu1web"],["Need for Speed: Underground 2","https://nfsu2.xyz/",null],["Need for Speed: Underground 2 (nfsunderground2.site)","https://nfsunderground2.site/",null],["Needy Streamer Overload","https://gn-math.dev/?id=708","https://github.com/web-ports/needy-streamer-overload"],["NetQuake.io","https://www.netquake.io/",null],["Neverball",null,"https://github.com/Neverball/neverball"],["New Super Mario Bros. Wii",null,"https://github.com/teaserlua/nsmbw-web-port"],["NFL Street","https://nflstreet.online/",null],["NFL Street 2 (NIL Street)","https://nilstreet.playthecombine.com/",null],["NHL '94","https://kingof94.web.app/",null],["Night in the Woods",null,"https://github.com/reeyuki/NightInTheWoods/"],["Night of the Consumers",null,"https://github.com/linkawaken1979-alt/night-of-the-consumers-web-port"],["Nikwi",null,"https://github.com/midzer/nikwi"],["No One Lives Forever","https://playnolf.com/",null],["Nodebuster",null,"https://github.com/degloved-net/nodebuster"],["Nothing",null,"https://github.com/gays-studio/nothing-wasm-web"],["Nothing (2)",null,"https://github.com/googoogoob/NothingWebPort"],["Nothing (3)",null,"https://github.com/BestSpark687090/bestspark-web-ports/tree/main/actual-nothing"],["Nubby's Number Factory","https://gn-math.dev/?id=517","https://github.com/genizy/biologyexams/tree/main/nubbys-number-factory"],["Numpty Physics",null,"https://github.com/midzer/numptyphysics"],["Ogre Battle 64: Person of Lordly Caliber (recomp)",null,"https://github.com/lfarroco/ogre-battle-64-recomp"],["OLD CheesedUP",null,"https://github.com/burnedpopcorn/OLD-CheesedUP-Web-Port"],["OMORI","https://gn-math.github.io/web-port/omori-fixed/","https://github.com/genizy/web-port/tree/main/omori-fixed"],["OMORI (openomori)",null,"https://github.com/dazacode/openomori"],["One Must Fall 2097 Remastered",null,"https://github.com/Jared-woodruff/OMF-2097-Remastered"],["One Night At Kim Jong Un's",null,"https://github.com/usheje883-maker/One-Night-At-Kim-Jong-Un-s-Webport"],["One Potion Please!",null,"https://github.com/ajtabjs/onepotionplease"],["Oneshot (Legacy)","https://gn-math.dev/?id=622","https://github.com/67-Factory/oneshotthing"],["Oneshot: World Machine Edition","https://wasm.rip/files/oneshot-wme/index.html","https://github.com/MercuryWorkshop/webshot"],["Open Golf",null,"https://github.com/mgerdes/Open-Golf"],["Open Sonic","https://clarkeadg.github.io/opensonic-js/",null],["OpenFodder",null,"https://github.com/OpenFodder/openfodder"],["OpenTTD","https://openttdonline.com/play/","https://github.com/OpenTTD/OpenTTD"],["OpenTTD (OpenTTD Online)",null,"https://github.com/swords02/openttd-online"],["OpenTyrian",null,"https://github.com/midzer/opentyrian"],["Overburden","https://gn-math.dev/?id=760",null],["Pacman",null,"https://github.com/midzer/pacman"],["Paint the Town Red",null,"https://github.com/Reeyuki/PttrWebport"],["Pang (pang-web)",null,"https://github.com/ray77/pang-web"],["Paper Mario (n64hub recomp)",null,"https://github.com/n64hub/paper-mario-recomp"],["Patrick’s Parabox",null,"https://github.com/puffrs/patrickparaboxweb"],["PEAK (VERY wip)","https://wasm.rip/files/peak/PEAK.html","https://github.com/wasmdotrip/Peak-Port"],["Peaks of Yore","https://gn-math.dev/?id=717","https://github.com/web-ports/peaks-of-yore"],["Pekka Kana 2","https://gmh-code.github.io/pk2/","https://github.com/GMH-Code/PK2"],["Penthouse Paradise","https://rgc.zone/ports/8782-duke-penthouse/run.html",null],["People Playground","https://gn-math.github.io/web-port/people-playground/","https://github.com/genizy/web-port/tree/main/people-playground"],["People Playground (2)",null,"https://github.com/bubbls/ugss/tree/main/people-playground"],["Pepsiman","https://pepsiman.ol.mr/",null],["Perfect Dark","https://perfectdark.royal-cake-5abc.workers.dev/",null],["Perfect Dark (n64hub recomp)",null,"https://github.com/n64hub/perfect-dark-recomp"],["Perimeter",null,"https://github.com/KD-lab-Open-Source/Perimeter"],["Phantasy Star Online (PSO Reborn)","https://recompiledgames.com/phantasy-star-online-recompiled",null],["Phantasy Star Online Episode I & II (PSO Reborn)","https://psoreborn.com/",null],["Phineas and Ferb in the Transport-inators of Doooom","https://stelight.games/play/webports/stellite.games/stellite/doom/index.html",null],["Pikmin","https://truffled.lol/games/pikmin/index.html",null],["Pizza Tower","https://gn-math.github.io/web-port/pizza-tower/","https://github.com/genizy/web-port/tree/main/pizza-tower"],["Pizza Tower 1.1.0",null,"https://github.com/burnedpopcorn/Pizza-Tower-1.1.0-Web-Port"],["Pizza Tower: Scoutdigo","https://gn-math.dev/?id=628",null],["PizzaTower April2021 WebPort",null,"https://github.com/burnedpopcorn/PizzaTower-April2021-WebPort"],["Plague Inc","https://gn-math.dev/?id=805",null],["Plague Inc.","https://wasm.rip/files/plauge/index.html",null],["Plague Inc: Evolved",null,"https://github.com/Reeyuki/PlagueIncEvolved"],["Plants vs Zombies: Fusion",null,"https://github.com/gays-studio/pvzfusion"],["Plants vs Zombies: GOTY Edition","https://gn-math.dev/?id=842","https://github.com/wszqkzqk/PvZ-Portable"],["Plants vs Zombies: GOTY Edition (2)",null,"https://github.com/web-ports/pvz"],["Plants vs Zombies: GOTY Edition (3)",null,"https://github.com/ajtabjs/pvzdeploy"],["Plants vs. Zombies","https://rgc.zone/ports/pvzweb/index.html",null],["Plunder & Pillage","https://rgc.zone/ports/8786-plunder/run.html",null],["Pokémon Emerald (pokeemerald-wasm)",null,"https://github.com/tripplyons/pokeemerald-wasm"],["Pokémon Emerald 3D (pokeemerald-3d)",null,"https://github.com/tripplyons/pokeemerald-3d"],["Pokémon Mystery Dungeon (Web Mystery Dungeon)","https://frequentgamer.itch.io/pmdweb",null],["Pokémon Snap (pokemonsnap-web)",null,"https://github.com/Sorikairox/pokemonsnap-web"],["Pokémon Yellow (pokemon-yellow-typescript)",null,"https://github.com/gididaf/pokemon-yellow-typescript"],["Portal","https://yikes.pw/portal/","https://github.com/weliveinhell/source-engine"],["Portal",null,"https://github.com/AlexBoops/portal-1-port"],["POSTAL",null,"https://github.com/leahanderson1/POSTAL-WASM"],["POSTAL 2 (KahnStation)","https://kahn.lol/gopostal",null],["Potion Craft: Alchemist Simulator",null,"https://github.com/GrassPorts/Potion-Craft-Alchemy-Simulator"],["Power Hover","https://gn-math.dev/?id=743","https://github.com/web-ports/power-hover"],["Powermanga",null,"https://github.com/midzer/Powermanga"],["Powerslave","https://rgc.zone/ports/8774-powerslave/run.html",null],["Prehistorik (prehistorik_js)",null,"https://github.com/cyxx/prehistorik_js"],["Pretend it's not there",null,null],["Prince of Persia","https://princejs.com/","https://github.com/midzer/SDLPoP"],["Pro Evolution Soccer 2011","https://pes11.optijuegos.net/",null],["Pro Evolution Soccer 2012","https://pes12.online/",null],["Pro Evolution Soccer 2014 (PSP)","https://pes14.online/",null],["Pro Evolution Soccer 6","http://pes6.optijuegos.net",null],["Project I.G.I.: I'm Going In","https://playigi.com/game/",null],["Project Zomboid",null,null],["Promises to Keep","https://gitea.mcalec.dev/mcalec/ptk",null],["Prototype",null,"https://github.com/midzer/prototype"],["Proxified Ports",null,"https://github.com/burnedpopcorn/Proxified-Ports"],["Psychopomp",null,"https://github.com/z4laxis/PsychopompWebport"],["PT HTML Launcher",null,"https://github.com/burnedpopcorn/PT-HTML-Launcher"],["PT Scoutdigo",null,"https://github.com/burnedpopcorn/PT-Scoutdigo-Web-Port"],["PTWebLauncher",null,"https://github.com/burnedpopcorn/PTWebLauncher"],["Purble Place (decomp)","https://areshkew.github.io/purble-place-decomp/","https://github.com/Areshkew/purble-place-decomp"],["Quake","https://qwasm.m-h.org.uk/","https://github.com/GMH-Code/Qwasm"],["Quake 2",null,"https://github.com/GMH-Code/Qwasm2"],["Quake 3",null,"https://github.com/lrusso/Quake3"],["Quake II","https://rgc.zone/ports/Q2web/index.html",null],["Quake II (q2.pieter.com)","http://q2.pieter.com",null],["Quake II (Quake WASM2)","https://qwasm2.m-h.org.uk/",null],["Quake III Arena","https://gn-math.dev/?id=263",null],["Quake III Arena (q3.pieter.com)","https://q3.pieter.com",null],["Quake III Arena (q3js)","https://q3js.com/","https://github.com/lklacar/q3js"],["Quake TG","https://rgc.zone/ports/quaketg/index.html",null],["QuakeWorld","http://q1.pieter.com",null],["Quest for Al-Qa'eda","https://rgc.zone/ports/8790-quest-alqaeda/run.html",null],["Quest for Hussein","https://rgc.zone/ports/8789-quest-hussein/run.html",null],["R.E.P.O","https://gn-math.github.io/web-port/repo/","https://github.com/genizy/web-port/tree/main/repo"],["Rabbids Go Home",null,"https://github.com/teaserlua/rabbids-go-home-web-port"],["RAFT","https://gn-math.github.io/web-port/raft/","https://github.com/genizy/web-port/tree/main/raft"],["Raft Wars 2","https://wasmarcade.app/play/raft-wars-2",null],["Ragnarok Online (roBrowser)",null,"https://github.com/vthibault/roBrowser"],["Rain World","https://stelight.games/play/webports/stellite.games/stellite/rain-world/",null],["Raldi's Crackhouse","https://gn-math.dev/?id=670","https://github.com/woahhcrackers/RaldiWeb-LEGACY"],["Raptor - Call of the Shadows",null,"https://github.com/midzer/raptor"],["Ratchet & Clank","https://re-rac.github.io/","https://github.com/re-rac/rerac"],["Ratchet & Clank: Size Matters","https://ratchetclanksizematters.online/",null],["Ravenfield",null,"https://github.com/degloved-net/Ravenfield"],["Rayman 2: The Great Escape (n64hub recomp)",null,"https://github.com/n64hub/rayman-2-recomp"],["RE:RUN","https://gn-math.dev/?id=260","https://github.com/aukak/RE-RUN"],["Rec Room",null,"https://github.com/98corbins"],["Red Stone Online (redstone-js)",null,"https://github.com/LostMyCode/redstone-js"],["Redneck Rampage","https://rgc.zone/ports/redneckrweb/run.html",null],["Redneck Rampage: Rides Again","https://rgc.zone/ports/rrridesagain/run.html",null],["Redneck Rampage: Route 66","https://rgc.zone/ports/rrroute66/run.html",null],["REminiscence",null,"https://github.com/midzer/reminiscence"],["Reset Generation","https://hubert-rybak.github.io/Reset-Generation-Wasm-Port/","https://github.com/Hubert-Rybak/Reset-Generation-Wasm-Port"],["Resident Evil 4","https://residentevil4.online/",null],["Resident Evil Outbreak File #1 & #2 (Outbreak Web)","https://outbreakweb.com/",null],["Return to Castle Wolfenstein","https://rgc.zone/ports/castlewolf/index.html",null],["Return to Castle Wolfenstein","https://wwasm.m-h.org.uk/","https://github.com/GMH-Code/Wwasm"],["Return to Castle Wolfenstein (rtcw.pieter.com)","http://rtcw.pieter.com",null],["Rimworld","https://wasm.rip/files/rimworld/index.html","https://github.com/SomeRandomFella/portsandrips/tree/master/rimworld"],["Rise of the Triad",null,"https://github.com/midzer/rottexpr"],["Road Rash (Three.js)","https://roadrash.pages.dev/",null],["Rockbot",null,"https://github.com/midzer/rockbot"],["Rocks'n'Diamonds","https://www.artsoft.org/rocksndiamonds/",null],["RollerCoaster Tycoon 2 (OpenRCT2)","https://rgc.zone/ports/openrct2/index.html",null],["Rolling Sky (web port)","https://rollingsky.3kh0.net","https://github.com/3kh0/rolling-sky"],["ROUNDS",null,"https://github.com/Nawsif/host/tree/main/ROUNDS"],["Rugby 08 (mitchivin)","https://mitchivin.github.io/rugby08/","https://github.com/mitchivin/rugby08"],["Rugby 08 (rugby08-web)",null,"https://github.com/IFAKA/rugby08-web"],["RuneScape Classic","https://runescapeclassic.gold/",null],["Running Fred",null,"https://github.com/aukak/running-fred"],["S.P.L.I.T","https://gn-math.dev/?id=839","https://github.com/degloved-net/s.p.l.i.t"],["S.T.A.L.K.E.R.: Call of Pripyat (ZoneVM)","https://zonevm.btr.pm/","https://github.com/x8BitRain/zone-vm"],["Saihate Station (さいはて駅)","https://gn-math.dev/?id=737","https://github.com/web-ports/saihate-station"],["Samogonki (Moonshine Racers)",null,"https://github.com/KD-lab-Open-Source/Samogonki"],["Samokatogeddon (Carmageddon II mod)","https://rgc.zone/ports/carma2/index.html",null],["San Francisco Rush 2049 (Recomp)",null,"https://github.com/n64hub/rush-2049-recomp"],["Saturday Night Slam Masters (ssm-online)",null,"https://github.com/GinoDaza/ssm-online"],["Scampton The Great","https://gn-math.dev/?id=802",null],["Schoolboy Runaway","https://gn-math.github.io/web-port/schoolboy-runaway/","https://github.com/genizy/web-port/tree/main/schoolboy-runaway"],["Scoutdingo",null,"https://github.com/web-ports/scoutdingo"],["SCP: Containment Breach","https://wasm.rip/files/scp/index.html","https://github.com/larpinguser/q8j"],["Scritchy Scratchy",null,"https://github.com/c00lkiddtech/scratchy"],["SDL Sopwith",null,"https://github.com/fragglet/sdl-sopwith"],["SDL-Ball",null,"https://github.com/midzer/sdl-ball"],["Serial Experiments Lain (lainTSX)",null,"https://github.com/ad044/lainTSX"],["The Seven Games of the Soul","https://omnium-games.github.io/faust/","https://github.com/Omnium-Games/faust"],["Sex with Hitler",null,"https://github.com/ajtabjs/swhport"],["Shadow Warrior","https://rgc.zone/ports/8775-swarrior/run.html","https://github.com/midzer/jfsw"],["Shadow Warrior: Twin Dragon","https://rgc.zone/ports/8787-sw-twindragon/run.html",null],["Shadow Warrior: Wanton Destruction","https://rgc.zone/ports/8788-sw-wanton/run.html",null],["Shift at Midnight","https://gn-math.dev/?id=721","https://github.com/webporting/Shift-At-Midnight"],["Shift at Midnight",null,"https://github.com/slqntdevss/ShiftAtMidnightPort"],["Shiromino",null,"https://github.com/midzer/shiromino"],["Shrimpio",null,"https://github.com/goodmeals/shrimpio"],["Sid Meier's SimGolf (OpenSGolf)",null,"https://github.com/crspytopgn/opensgolf"],["Side Effects",null,"https://github.com/gn-math/assets/tree/main/318"],["Silent Hill (silent-hill-decomp PC port)",null,"https://github.com/SlickAmogus/silent-hill-decomp/tree/pc-port"],["Silent Hill: Origins","https://silenthillorigins.zeliaopen.space/",null],["Silkroad Online (OpenSRO)","https://opensro.online/",null],["SimCity (micropolisJS)","https://www.graememcc.co.uk/micropolisJS/","https://github.com/graememcc/micropolisJS"],["SimGolf","https://richardatct.github.io/simgolf-web/",null],["The Simpsons: Hit & Run","http://shar-wasm.cjoseph.workers.dev/?skipmovie",null],["The Simpsons: Hit & Run (rgc.zone)","https://rgc.zone/ports/simphnr/index.html",null],["The Simpsons: Hit & Run (shar-wasm)","https://shar-wasm.cjoseph.workers.dev/",null],["The Simpsons: Hit & Run (Web Port)","https://vheissu.github.io/hit-and-run-web/","https://github.com/Vheissu/hit-and-run-web"],["The Simpsons: Hit & Run (with mod support)","https://shar.harshvirdhaliwal.com/",null],["SimTower (benphelps)","https://benphelps.github.io/simtower/","https://github.com/benphelps/simtower"],["SimTower (concilia-tower)",null,"https://github.com/Jonahss/concilia-tower"],["Simutrans",null,"https://github.com/midzer/simutrans"],["Skate × Rust (Global Terror)","https://global-terror.net/",null],["Skate 3","http://skate.aaddpp.lol",null],["Slay the Spire","https://truffled.lol/games/sts/index.html",null],["Slender: The 8 Pages","https://gn-math.dev/?id=451",null],["Slender: The Eight Pages","https://gn-math.github.io/web-port/slender/","https://github.com/genizy/web-port/tree/main/slender"],["Slenderina The Cellar",null,"https://github.com/Reeyuki/slenderina"],["Slendytubbies",null,"https://github.com/web-ports/slendytubbies"],["Slendytubbies 1","https://gn-math.dev/?id=796",null],["Slendytubbies 2","https://gn-math.dev/?id=806","https://github.com/web-ports/slendytubbies/tree/main/2"],["Slendytubbies 2D","https://gn-math.dev/?id=807","https://github.com/web-ports/slendytubbies/tree/main/2d"],["Slime Rancher","https://gn-math.dev/?id=591",null],["Slime Ranchers",null,"https://github.com/web-ports/slime-ranchers"],["Slime Ranchers (2)",null,"https://github.com/Reeyuki/SlimeRanch"],["SM Kart ZX",null,"https://github.com/burnedpopcorn/SM-Kart-ZX-Web-Port"],["sm64plus webport PoC",null,"https://github.com/burnedpopcorn/sm64plus-webport-PoC"],["SNAPTIC",null,"https://github.com/degloved-net/snaptic-web"],["SOCOM II: U.S. Navy SEALs (SOCOM Legacy)","https://socomlegacy.com/","https://github.com/Scotho/socom-legacy"],["Sokoban",null,"https://github.com/midzer/simple-sokoban"],["Something",null,"https://github.com/gays-studio/something-web"],["Something (2)",null,"https://github.com/googoogoob/SomethingWebPort"],["Something (3)",null,"https://github.com/BestSpark687090/bestspark-web-ports/tree/main/actual-something"],["Sonic 3 A.I.R.",null,"https://github.com/Eukaryot/sonic3air"],["Sonic CD","https://gn-math.dev/?id=589","https://github.com/TWS2401/Sonic-CD-WASM"],["Sonic CD (Sonic-CD-WASM)","https://tws2401.github.io/Sonic-CD-WASM/",null],["Sonic GDevelop",null,"https://github.com/burnedpopcorn/Sonic-GDevelop-Web-Port"],["Sonic Mania","https://gn-math.dev/?id=590","https://github.com/VinMannie/SonicManiaWeb"],["Sonic Robo Blast 2","https://afd2025.srb2.org/","https://github.com/chromaticpipe/SRB2-WASM"],["Sonic Robo Blast 2 (2)",null,"https://github.com/web-ports/srb2"],["Sonic Robo Blast 2 Kart","https://skyleite.github.io/Kart-Public-WASM/",null],["Sonic Robo Blast 2 Legacy (SRB2LegacyWeb)","http://legacyweb.gvbvdxx.me/","https://github.com/gvbvdxxalt2/SRB2LegacyWeb"],["Sonic the Fighters","https://play.sonicthefighte.rs/",null],["Sonic the Hedgehog (2013)","https://vinmannie.github.io/Sonic-1-WASM/","https://github.com/VinMannie/Sonic-1-WASM"],["Sonic the Hedgehog 1 & 2 (Sonic-Decompilation-WASM)",null,"https://github.com/mattConn/Sonic-Decompilation-WASM"],["Sonic the Hedgehog 2",null,"https://github.com/VinMannie/Sonic-2-WASM"],["Sonic the Hedgehog 4: Episode I","https://wamwoowam.co.uk/sonic4/",null],["Sonic Worlds Next","https://grubbyplaya.github.io/Sonic-Worlds-Next-WASM/Sonic%20Worlds%20Next.html",null],["SONIC.EXE","https://gn-math.github.io/web-port/sonic.exe/","https://github.com/genizy/web-port/tree/main/sonic.exe"],["Sonic.EXE (ORIGINAL)","https://gn-math.dev/?id=606",null],["Sonic2 Community Cut WebPort",null,"https://github.com/burnedpopcorn/Sonic2-Community-Cut-WebPort"],["sonic3air webport",null,"https://github.com/burnedpopcorn/sonic3air-webport"],["SonicManiaPlusWebPort",null,"https://github.com/burnedpopcorn/SonicManiaPlusWebPort"],["Space Cadet",null,"https://github.com/k4zmu2a/SpaceCadetPinball"],["Space Rangers: Quests","https://spacerangers.gitlab.io/",null],["Space Station 13 (ss13.live)","https://ss13.live","https://github.com/Greytide-inc/ss13.live"],["Spaceflight Simulator","https://gn-math.dev/?id=808","https://github.com/web-ports/spaceflight-simulator"],["The Specialists (Half-Life mod, specialists-browser)","https://bulletballet.dev/","https://github.com/klampatech/specialists-browser"],["Speed Stars","https://gn-math.github.io/web-port/speed-stars/","https://github.com/genizy/web-port/tree/main/speed-stars"],["Speedy Blupi / Speedy Eggbert 2 / Planet Blupi","https://speedyblupi.com/","https://github.com/openeggbert/speedyblupi.com"],["Spelunky Classic HD","https://yancharkin.itch.io/spelunky-classic-hd",null],["Spider-Man 2","https://spiderman2.online/",null],["SRB2 Kart",null,"https://github.com/skyleite/Kart-Public-WASM/"],["SSX 3","https://ssx3.online/",null],["SSX 3 (ssx3-decomp)",null,"https://github.com/andersfischernielsen/ssx3-decomp"],["Star Command (SSI, browser remake)",null,"https://github.com/DrEvil-TitaniumHelix/star-command-remake"],["Star Fox Adventures","https://foxhollow.dev/",null],["Star Wars Jedi Knight Dark Forces 2","https://rgc.zone/ports/oswjkdf2/index.html",null],["Star Wars Jedi Knight: Dark Forces II",null,"https://github.com/shinyquagsire23/OpenJKDF2"],["Star Wars Jedi Knight: Jedi Academy","https://jk.q3js.com",null],["Star Wars Jedi Knight: Jedi Academy (OpenJK, rgc.zone)","https://rgc.zone/ports/openjkspweb/index.html",null],["Star Wars: Empire at War (Browser Edition)","https://playeaw.com","https://github.com/Glenn332/Empire-At-War-Browser-Edition"],["Stardew Valley","https://gn-math.dev/?id=789","https://github.com/degloved-net/stardew-wasm"],["Stardew Valley","https://wasm.rip/files/stardewvalley/index.html",null],["Starfighter",null,"https://github.com/midzer/starfighter"],["Stick War","https://wasmarcade.app/play/stick-war",null],["Stick with It","https://gn-math.dev/?id=502","https://github.com/slqntdevss/StickWithItPort"],["Street Fighter Anniversary Collection","https://streetfighteranniversary.online/",null],["Street Fighter III: 3rd Strike","https://streetfighter3.online/",null],["Stunts (PlayStunts)","https://playstunts.com/",null],["Stunts (stunts-hd)",null,"https://github.com/mr-finster/stunts-hd"],["Subway Surfers: Las Vegas",null,"https://github.com/Toastiest64/Las-Vegas"],["Sugary Spire",null,"https://github.com/burnedpopcorn/Sugary-Spire-Web-Port"],["Suicide Guy Deluxe",null,"https://github.com/Reeyuki/SuicideGuyDeluxe"],["Sunky's Schoolhouse",null,"https://github.com/gays-studio/sunkys-schoolhouse-webport"],["Supaplex",null,"https://github.com/midzer/open-supaplex"],["Super Bo Noise",null,"https://github.com/burnedpopcorn/Super-Bo-Noise-Web-Port"],["Super Choppy Orc",null,"https://github.com/gays-studio/super-choppy-orc"],["Super Mario 64","https://gn-math.dev/?id=588",null],["Super Mario 64","https://recompiledgames.com/super-mario-64-recompiled",null],["Super Mario 64 (multiplayer, olivers.tools)","https://olivers.tools/?play",null],["Super Mario 64 (n64hub recomp)",null,"https://github.com/n64hub/super-mario-64-recomp"],["Super Mario 64 (rgc.zone)","https://rgc.zone/ports/sm64-main/index.html",null],["Super Mario 64 (sm3das)","https://heyitsheart.github.io/sm3das/64/",null],["Super Mario 64 (sm64coopdx in browser)","https://b1t64.github.io/m64-dl6t2g/","https://github.com/B1T64/m64-dl6t2g"],["Super Mario 64 (sm64js)",null,"https://github.com/sm64js/sm64js"],["Super Mario 64 DS (Enhanced PC Port)",null,"https://github.com/wigwoo1/Super-Mario-64-DS-Enhanced-PC-Port"],["Super Mario 64 FPS",null,"https://github.com/gays-studio/sm64fps-port"],["Super Mario 64 in Scratch",null,"https://github.com/naegoxdev/sm64-scratch"],["Super Mario 64 Multiplayer","https://olivers.tools/play/",null],["Super Mario Bros. Remastered","https://gn-math.dev/?id=736","https://github.com/bubbls/ports/blob/main/smb-remastered"],["Super Mario Galaxy",null,"https://github.com/T4ctica1YT/SMGwebport"],["Super Mario Kart (SM-Kart-ZX Web Port)","https://burnedpopcorn.github.io/SM-Kart-ZX-Web-Port/index.html",null],["Super Mario Sunshine","https://truffled.lol/games/sms/index.html",null],["Super Mario War",null,"https://github.com/mmatyas/supermariowar"],["Super Mario Zombies","https://smz.fun/",null],["Super Monkey Ball","https://monkeyball-online.pages.dev/",null],["Super Smash Bros. (n64hub recomp)",null,"https://github.com/n64hub/super-smash-bros-recomp"],["Super Smash Bros. (smash.fun)","https://smash.fun/","https://github.com/turtlesoupy/opensmash"],["Super Smash Bros. Melee (melee-pc)",null,"https://github.com/999sian/melee-pc"],["Super Smash Bros. Ultimate (SSBU-port-web)",null,"https://github.com/longurara/SSBU-port-web"],["Superflight",null,"https://github.com/squidward5/superflight-webport"],["SuperTux",null,"https://github.com/SuperTux/supertux"],["SuperTuxKart (browser)",null,"https://github.com/ading2210/stk-code"],["Swabs Expedition",null,"https://github.com/burnedpopcorn/Swabs-Expedition-Web-Port"],["Syndicate","https://rgc.zone/ports/syndweb/index.html","https://github.com/midzer/freesynd"],["T Cubed",null,"https://github.com/web-ports/baldi-mods/tree/main/t3"],["T Cubed (2)",null,"https://github.com/GlaceonFan77/T-Cubed-Web"],["Tekken 3 (Tekken3Remake)",null,"https://github.com/n0madic/Tekken3Remake"],["Tekken 4","https://tekken4.online/",null],["Tekken 5","https://tekken5.online/",null],["Tekken: Dark Resurrection","https://tekkendr.live/",null],["Tenchu: Shinobi Gaisen",null,"https://github.com/Fuuzetsu/tenchu-shinobi-gaisen-pc"],["Terraria (3)","https://playterraria.lol/",null],["Tony Hawk's Pro Skater (thps1-web-port)",null,"https://github.com/nascarfan03/thps1-web-port"],["Tony Hawk's Pro Skater 3","https://tonyhawkpro3.online/",null],["Tony Hawk's Underground 2","https://tonyhawksunderground2.online/",null],["Tony Hawk's Underground 2 (thug2-web)",null,"https://github.com/Loosemond/thug2-web"],["Total Annihilation: Kingdoms (OpenKingdoms)",null,"https://github.com/OpenKingdoms/OpenKingdoms"],["t³ (T cubed)","https://gn-math.dev/?id=818",null],["Taiko no Tatsujin","https://cjdgrevival.com/",null],["Tattletail","https://gn-math.github.io/web-port/tattletail/","https://github.com/genizy/web-port/tree/main/tattletail"],["Team Fortress 2","https://tf2.riddy.workers.dev/",null],["Tekken 5: Dark Resurrection (Recomp)","https://tkdr-recomp.pages.dev/","https://github.com/gasparegas/tkdr-recomp"],["Terraria","https://gn-math.dev/?id=669","http://github.com/mercuryWorkshop/terraria-wasm"],["Terraria (2)","https://terraria.mercurywork.shop/","https://github.com/web-ports/terraria"],["That's Not My Neighbor","https://gn-math.github.io/web-port/thats-not-my-neighbor/","https://github.com/genizy/web-port/tree/main/thats-not-my-neighbor"],["There's a Butcher Around",null,"https://github.com/usheje883-maker/There-s-A-Butcher-Around-Webport"],["There is No Game: Wrong Dimension",null,"https://github.com/dashiellbenton/ports-data/tree/main"],["To The Core",null,null],["Tomb Raider","http://xproger.info/projects/OpenLara/","https://github.com/XProger/OpenLara"],["Toonstruck","https://rgc.zone/ports/toonstruckweb/index.html#toonstruck-fargus",null],["Torus Trooper",null,"https://github.com/speps/tt"],["Totally Accurate Battle Simulator",null,"https://github.com/web-ports/tabs"],["Totally Accurate Battle Simulator (2)",null,"https://github.com/Reeyuki/Tabs"],["Totally Accurate Battle Simulator (TABS)","https://gn-math.dev/?id=827",null],["Touhou Mother","https://gn-math.dev/?id=523","https://github.com/aukak/gameports/tree/main/touhou%20mother"],["Tower To Heaven",null,"https://codeberg.org/midzer/tth"],["Traffic Racer",null,"https://github.com/genizy/traffic-racer"],["Trees Hate You",null,"https://github.com/thirstygithub/fugglelatougin"],["Tremulous","https://webnova360.com/play-tremulous/",null],["TriZon",null,"https://github.com/degloved-net/trizon"],["Trombone Champ","https://wasm.rip/files/tchamp/index.html","https://github.com/degloved-net/trombone-champ"],["Tsukihime (TsukiWeb)","https://tsukiweb.holofield.fr/",null],["Tyrian (OpenTyrian)","https://midzer.de/wasm/opentyrian/",null],["UFC 2009 Undisputed / Throwdown","https://ufc2.online/",null],["UFC Throwdown","https://ufc2.online/",null],["Ultima VI (Rust/wasm)",null,"https://github.com/2lab-ai/ultima6"],["ULTRAKILL","https://gn-math.dev/?id=196",null],["ULTRAKILL","https://monoxide.dev/ultrakill",null],["Ultrakill Prelude","https://gn-math.github.io/web-port/ultrakill/","https://github.com/genizy/web-port/tree/main/ultrakill"],["Ultrapool","https://gn-math.dev/?id=757","https://github.com/ParrrotVR/ultrapoolwebport"],["Ultrapool (bread fork)",null,"https://github.com/genizy/ultrapoolwebport-nothreads"],["Uncharted Waters: New Horizons",null,"https://github.com/JohanLi/uncharted-waters-2"],["Uncle Albert's Magical Album",null,"https://github.com/panlybero/uncle-albert-magical-album-greek"],["Undertale","https://gn-math.github.io/web-port/undertale/","https://github.com/genizy/web-port/tree/main/undertale"],["Undertale Yellow","https://gn-math.github.io/web-port/undertale-yellow/","https://github.com/genizy/web-port/tree/main/undertale-yellow"],["Unreal Gold",null,"https://github.com/National-Porting-Association/unrealgold-emscripten"],["Unreal Tournament (SurrealEngine Web)","https://demensdeum.com/demos/SurrealEngine/",null],["Untitled Goose Game","https://gn-math.dev/?id=718","https://github.com/web-ports/untitled-goose-game"],["Untitled Goose Game (2)",null,"https://github.com/webporting/Untitled-Goose-Game"],["Upload Labs",null,"https://github.com/googoogoob/UploadLabsWebPort"],["Upstream",null,"https://github.com/degloved-net/upstream"],["The Ur-Quan Masters (Star Control II)","https://urquanmasters.org/","https://github.com/vcorem/uqm-3do-web"],["Urban Chaos (OpenChaos)","https://rgc.zone/ports/urbanchaosweb/","https://github.com/Carter54git/Urban-Chaos-OpenChaos-ported-to-web"],["Urban Reign (PS2 recomp)",null,"https://github.com/anmolverma5/urban-reign-wasm"],["Urban Terror","http://ut.pieter.com","https://github.com/FrozenSand/ioq3-for-UrbanTerror-4"],["UvuvwevwevweOnyetenvewveUgwemubwemOssas","https://gn-math.dev/?id=795","https://github.com/bubbls/ports/tree/main/UvuvwevwevweOnyetenvewveUgwemubwemOssas"],["Vangers",null,"https://github.com/KranX/Vangers"],["Vectoroids",null,"https://github.com/midzer/vectoroids"],["Very Realistic Game Dev Simulator",null,"https://github.com/UMMMM-GUYSSS/Very-Realistic-Game-Dev-Simulator"],["Violetland",null,"https://github.com/midzer/violetland"],["Virtua Fighter","https://vf1-recomp.pages.dev/","https://github.com/mr-finster/vf1-recomp"],["Virtua Tennis 2","https://virtuatennis2.online/",null],["Virtual On: Cyber Troopers","https://solid7s.github.io/Virtual-On-Web/",null],["Void Whispers",null,"https://github.com/degloved-net/void-whispers"],["VVVVVV","https://stelight.games/play/webports/stellite.games/stellite/vvvvvv/","https://github.com/midzer/vvvvvv"],["WadCMD","https://wadcmd.com/",null],["Warcraft II (Wargus)","https://rgc.zone/ports/Warcraft2web/index.html",null],["Warcraft III: Reign of Chaos / The Frozen Throne (wc3-wasm)",null,"https://github.com/rgnv/wc3-wasm"],["The Warriors","https://thewarriors.online/",null],["Warzone 2100 (Web Edition)","https://wz2100.net/news/warzone-2100-web-edition/",null],["WASM Arcade","https://wasmarcade.com/",null],["wasm.rip","https://wasm.rip",null],["Water Closet",null,"https://github.com/midzer/waterCloset"],["Web Port Unblocked",null,"https://github.com/burnedpopcorn/Web-Port-Unblocked"],["Webfishing","https://gn-math.github.io/web-port/web-fishing/","https://github.com/genizy/web-port/tree/main/web-fishing"],["webport.ing",null,"https://github.com/webporting"],["Weltendämmerung (weltendaemmerung (spec-driven RE + web port))",null,"https://github.com/s-macke/weltendaemmerung"],["while True: learn()",null,"https://github.com/dashiellbenton/ports/tree/main/while-true-learn"],["Who's Your Daddy?","https://gn-math.dev/?id=791","https://github.com/Reeyuki/daddygame"],["Who's Your Daddy? (2)",null,"https://github.com/web-ports/daddygame"],["Wii Forecast Channel (forecast-channel-web)",null,"https://github.com/ravensclawx/forecast-channel-web"],["William Shatner's TekWar","https://rgc.zone/ports/8777-tekwar/run.html",null],["Wine Assembly (Windows games in the browser: RollerCoaster Tycoon, Space Cadet…)",null,"https://github.com/Emupedia/wine-assembly"],["WipEout","https://phoboslab.org/wipegame/","https://github.com/phoboslab/wipeout-rewrite"],["Witch's Heart","https://gn-math.github.io/web-port/witch-heart/","https://github.com/genizy/web-port/tree/main/witch-heart"],["Witchaven","https://rgc.zone/ports/8783-witchaven/run.html",null],["Witchaven II","https://rgc.zone/ports/8784-witchaven2/run.html",null],["Wizards in Shorts",null,"https://github.com/Reeyuki/WizardsInShorts"],["Wolfenstein 3D",null,"https://github.com/midzer/wolf4sdl"],["Wolfenstein 3D (HTML5, lazarv)","https://wolf3d.wadcmd.com/","https://github.com/lazarv/wolf3d"],["Wolfenstein 3D (Iron Wolf)",null,"https://github.com/Ragnaroek/iron-wolf"],["Wolfenstein 3D TG","https://rgc.zone/ports/wolf3dtg/index.html",null],["World of Warcraft (wowser)",null,"https://github.com/wowserhq/wowser"],["Worldbox",null,"https://gitlab.com/Shindo957-Official/worldfox"],["WW2 GI: Platoon Leader","https://rgc.zone/ports/8791-ww2-platoon/run.html",null],["WWE SmackDown vs. Raw 2010","https://wwe2010.online/",null],["WWE SmackDown vs. Raw 2011","https://wwe2011.online/",null],["WWE SmackDown! Here Comes the Pain","https://wwepain.online/",null],["WWE SmackDown! vs. RAW","https://smackdownvsraw.online/",null],["WWII GI","https://rgc.zone/ports/ww2giweb/run.html",null],["The X-Files Game (shiloh)",null,"https://github.com/Asterber/shiloh"],["Xash3D",null,"https://github.com/btarg/Xash3D-Emscripten"],["xbattle (xbattle-web)",null,"https://github.com/lab1702/xbattle-web"],["XBill",null,"https://github.com/bobeasthope2/xbill-web"],["XCOM",null,"https://github.com/midzer/OpenXcom"],["XEvil (xevil-wasm)",null,"https://github.com/CyberspaceVii/xevil-wasm"],["XGalaga",null,"https://github.com/midzer/xgalaga-sdl"],["Xiao Xiao 4: Bar Shootout","https://wasmarcade.app/play/xiao-xiao-4",null],["xrick","https://www.xrick.net/",null],["Yandere Simulator","https://gn-math.github.io/web-port/yandere-simulator/","https://github.com/genizy/web-port/tree/main/yandere-simulator"],["Yesterday's Meat",null,"https://github.com/SoupcanUBG/Yesterdays-Meat"],["yomih hustle",null,"https://github.com/web-ports/yomi-hustle"],["You Want Half a Mounds Bar",null,"https://github.com/wasm-rip/You-Want-Half-A-Mounds-Bar-Web"],["Your Only Move is Hustle","https://gn-math.dev/?id=776","https://github.com/webporting/Your-Only-Move-Is-HUSTLE"],["Your Only Move is Hustle (2)",null,"https://github.com/web-ports/yomi-hustle"],["Youtubers Life OMG!",null,"https://github.com/Reeyuki/ytlifeomg"],["Yume Nikki","https://gn-math.github.io/web-port/yume-nikki/","https://github.com/genizy/web-port/tree/main/yume-nikki"],["Zato",null,"https://github.com/z4laxis/ZatoWebport"],["Zelda II: The Adventure of Link (z2rs)","https://z2rs.com/",null],["Zeliard",null,"https://github.com/nolanvenhola/zeliard"],["Zuma Deluxe (ZumaTAS)",null,"https://github.com/9933fa/Zuma-Deluxe-TAS"]];
+const STEAM_ICON = 'data:image/png;base64,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';
+
+const STEAM_INSTALLED_KEY = 'novaSteamInstalled';
+const STEAM_PLAY_KEY = 'novaSteamPlaytime';
+const STEAM_CACHE = 'nova-ports-v1';
+
+const steamRead = (k, d) => { try { return JSON.parse(localStorage.getItem(k) || JSON.stringify(d)); } catch (e) { return d; } };
+const steamWrite = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} };
+const steamInstalled = () => steamRead(STEAM_INSTALLED_KEY, []);
+const steamSaveInstalled = (l) => steamWrite(STEAM_INSTALLED_KEY, l);
+const steamPlay = () => steamRead(STEAM_PLAY_KEY, {});
+const steamAddPlay = (id, secs) => { const p = steamPlay(); p[id] = (p[id] || 0) + secs; steamWrite(STEAM_PLAY_KEY, p); };
+const steamFmt = (secs) => !secs ? '0 min' : secs < 3600 ? Math.round(secs / 60) + ' min' : (secs / 3600).toFixed(1) + ' h';
+
+function steamAppId(name) {
+  const s = String(name);
+  const base = s.toLowerCase().normalize('NFKD').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 36);
+  let h = 0;
+  for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) % 100000;
+  return 'web_' + (base || 'app') + '_' + h;
+}
+function steamHost(url) { try { return new URL(url).host.replace(/^www\./, ''); } catch (e) { return 'web'; } }
+
+function steamUninstall(id) {
+  steamSaveInstalled(steamInstalled().filter(x => x.id !== id));
+  const i = APPS.findIndex(a => a.id === id);
+  if (i >= 0) APPS.splice(i, 1);
+}
+
+function renderWebAppWindow(rec, entry) {
+  let session = 0;
+  rec.body.innerHTML =
+    '<div style="display:flex;flex-direction:column;height:100%;background:#0b0e13;position:relative">' +
+      '<div style="display:flex;align-items:center;gap:8px;padding:6px 10px;border-bottom:1px solid #232b36;background:#12171f;flex:none">' +
+        '<b style="color:#e6edf7;font-size:12.5px">' + entry.name.replace(/</g, '&lt;') + '</b>' +
+        '<span style="color:#6b7a8f;font-size:11px">' + steamHost(entry.url) + '</span>' +
+        '<span style="flex:1"></span>' +
+        '<button class="btn" type="button" data-wa-overlay>Overlay</button>' +
+        '<button class="btn" type="button" data-wa-reload>Reload</button>' +
+        '<a class="btn" style="text-decoration:none" href="' + entry.url + '" target="_blank" rel="noopener noreferrer">Open in tab ↗</a>' +
+        '<button class="btn" type="button" data-wa-remove>Uninstall</button>' +
+      '</div>' +
+      '<div style="flex:1;min-height:0;position:relative">' +
+        '<iframe src="' + entry.url + '" style="position:absolute;inset:0;width:100%;height:100%;border:0;background:#05070a" allow="fullscreen; gamepad; autoplay"></iframe>' +
+      '</div>' +
+      '<div data-wa-ovl style="display:none;position:absolute;inset:0;background:rgba(7,10,14,.9);z-index:9;overflow:auto">' +
+        '<div style="max-width:560px;margin:8vh auto;padding:20px 22px;background:#121820;border:1px solid #27313d;border-radius:14px;color:#e6edf7;font:13px/1.6 system-ui,sans-serif">' +
+          '<div style="display:flex;align-items:center;gap:10px"><img src="' + STEAM_ICON + '" style="width:28px;height:28px">' +
+            '<b style="font-size:15px">' + entry.name.replace(/</g, '&lt;') + '</b></div>' +
+          '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:14px 0">' +
+            '<div style="background:#0d1219;border:1px solid #232d38;border-radius:8px;padding:9px"><div style="color:#7d8b9d;font-size:11px">SESSION</div><b data-wa-session>0 min</b></div>' +
+            '<div style="background:#0d1219;border:1px solid #232d38;border-radius:8px;padding:9px"><div style="color:#7d8b9d;font-size:11px">TOTAL PLAYTIME</div><b>' + steamFmt(steamPlay()[entry.id] || 0) + '</b></div>' +
+          '</div>' +
+          '<div style="color:#8b99ab;font-size:12px;margin-bottom:12px">Steam-style overlay: session time, playtime and host actions. Shift+Tab opens it while this Nova window has focus; inside the game frame the browser hands the key to the game, so use the Overlay button there.</div>' +
+          '<div style="display:flex;gap:8px;flex-wrap:wrap">' +
+            '<button class="btn" type="button" data-wa-fullscreen>Fullscreen</button>' +
+            '<button class="btn" type="button" data-wa-reload2>Reload game</button>' +
+            '<button class="btn" type="button" data-wa-close>Back to game</button>' +
+          '</div>' +
+        '</div>' +
+      '</div>' +
+    '</div>';
+
+  const ovl = rec.body.querySelector('[data-wa-ovl]');
+  const sessionLabel = rec.body.querySelector('[data-wa-session]');
+  const frame = rec.body.querySelector('iframe');
+  const toggle = (on) => { ovl.style.display = on ? 'block' : 'none'; };
+
+  rec.body.querySelector('[data-wa-overlay]').addEventListener('click', () => toggle(ovl.style.display !== 'block'));
+  rec.body.querySelector('[data-wa-close]').addEventListener('click', () => toggle(false));
+  rec.body.querySelector('[data-wa-fullscreen]').addEventListener('click', () => {
+    const el = rec.el || rec.body;
+    if (el.requestFullscreen) el.requestFullscreen().catch(() => {});
+  });
+  const reload = () => { frame.src = entry.url; };
+  rec.body.querySelector('[data-wa-reload]').addEventListener('click', reload);
+  rec.body.querySelector('[data-wa-reload2]').addEventListener('click', reload);
+  rec.body.querySelector('[data-wa-remove]').addEventListener('click', () => {
+    steamUninstall(entry.id);
+    rec.body.innerHTML = '<div class="pad"><h3 class="sec">Uninstalled</h3><p class="small muted">' +
+      entry.name.replace(/</g, '&lt;') + ' was removed from Steam and the Start menu. Close this window.</p></div>';
+  });
+
+  const onKey = (e) => {
+    if (e.key === 'Tab' && e.shiftKey) { e.preventDefault(); toggle(ovl.style.display !== 'block'); }
+    if (e.key === 'Escape') toggle(false);
+  };
+  document.addEventListener('keydown', onKey);
+  const tick = setInterval(() => {
+    if (!document.body.contains(rec.body)) { clearInterval(tick); document.removeEventListener('keydown', onKey); return; }
+    if (document.visibilityState !== 'visible') return;
+    session += 1;
+    steamAddPlay(entry.id, 1);
+    if (sessionLabel) sessionLabel.textContent = steamFmt(session);
+  }, 1000);
+}
+
+function steamInstall(name, url) {
+  const entry = { id: steamAppId(name), name, url };
+  if (!APPS.some(a => a.id === entry.id)) {
+    APPS.push({
+      id: entry.id, name: entry.name, glyph: (entry.name[0] || 'W').toUpperCase(),
+      size: [1020, 720], pkg: true, pkgColor: '#1b2838',
+      render: (rec) => renderWebAppWindow(rec, entry)
+    });
+  }
+  const list = steamInstalled();
+  if (!list.some(x => x.id === entry.id)) { list.push(entry); steamSaveInstalled(list); }
+  return entry;
+}
+
+/* real prefetch: works only when the host sends CORS headers */
+async function steamPrefetch(entry, onProgress) {
+  try {
+    if (!('caches' in window)) return 'online';
+    const res = await fetch(entry.url, { mode: 'cors' });
+    if (!res.ok) return 'online';
+    const total = Number(res.headers.get('content-length') || 0);
+    if (!res.body || !res.body.getReader) return 'online';
+    const reader = res.body.getReader();
+    const chunks = [];
+    let got = 0;
+    for (;;) {
+      const step = await reader.read();
+      if (step.done) break;
+      chunks.push(step.value);
+      got += step.value.length;
+      if (total) onProgress(Math.min(99, Math.round(got / total * 100)));
+    }
+    const cache = await caches.open(STEAM_CACHE);
+    await cache.put(entry.url, new Response(new Blob(chunks), { headers: res.headers }));
+    onProgress(100);
+    return 'cached';
+  } catch (e) {
+    return 'online';
+  }
+}
+
+steamInstalled().forEach(x => { if (x && x.id && x.url && !APPS.some(a => a.id === x.id)) steamInstall(x.name, x.url); });
+
+function renderSteamDesktop(rec) {
+  let tab = 'library';
+  let query = '';
+  let shown = 120;
+  let selected = null;
+  let big = false;
+  const queue = [];
+
+  rec.body.innerHTML =
+    '<div style="display:flex;flex-direction:column;height:100%;background:linear-gradient(180deg,#171d26,#10151c);color:#dfe8f3;font:13px/1.45 system-ui,sans-serif">' +
+      '<div style="display:flex;align-items:center;gap:12px;padding:9px 14px;background:#0e1319;border-bottom:1px solid #26303c;flex:none">' +
+        '<img src="' + STEAM_ICON + '" alt="Steam" style="width:22px;height:22px;display:block">' +
+        '<span style="font-weight:800;letter-spacing:.16em;font-size:12px;color:#8fd2ff">STEAM</span>' +
+        '<span style="color:#5d6b7d;font-size:11px" data-sd-count></span>' +
+        '<span style="flex:1"></span>' +
+        '<input id="sdSearch" placeholder="Search" style="width:210px;background:#0a0f15;border:1px solid #2a3542;border-radius:6px;color:#dfe8f3;padding:6px 9px;font-size:12px">' +
+        '<button class="btn" type="button" data-sd-big>Big Picture</button>' +
+        '<span style="color:#7d8b9d;font-size:11px;border-left:1px solid #26303c;padding-left:10px">local profile</span>' +
+      '</div>' +
+      '<div style="display:flex;flex:1;min-height:0">' +
+        '<div style="width:172px;flex:none;background:#0c1117;border-right:1px solid #222b36;padding:10px 8px;display:flex;flex-direction:column;gap:3px">' +
+          '<button class="sd-tab" data-sd-tab="store" type="button">Store</button>' +
+          '<button class="sd-tab on" data-sd-tab="library" type="button">Library</button>' +
+          '<button class="sd-tab" data-sd-tab="installed" type="button">Installed</button>' +
+          '<button class="sd-tab" data-sd-tab="friends" type="button">Friends</button>' +
+          '<div style="margin-top:auto;color:#4f5d6e;font-size:10.5px;line-height:1.5;padding:6px 4px">Catalogue: Carter54git/Ultimate-Catalog-Of-Web-Game-Ports</div>' +
+        '</div>' +
+        '<div id="sdBody" style="flex:1;min-width:0;overflow:auto;padding:12px"></div>' +
+        '<div id="sdDetail" style="width:0;flex:none;overflow:auto;border-left:1px solid #222b36;background:#0d131a"></div>' +
+      '</div>' +
+      '<div style="display:flex;align-items:center;gap:10px;padding:6px 12px;background:#0b1017;border-top:1px solid #232c37;font-size:11.5px;color:#8b99ab;flex:none">' +
+        '<span data-sd-dl>No downloads</span>' +
+        '<div style="flex:1;height:4px;background:#1a232e;border-radius:2px;overflow:hidden"><div data-sd-bar style="height:100%;width:0;background:linear-gradient(90deg,#4f8cff,#8fd2ff)"></div></div>' +
+        '<span data-sd-installed-count></span>' +
+      '</div>' +
+    '</div>';
+
+  const body = rec.body.querySelector('#sdBody');
+  const detail = rec.body.querySelector('#sdDetail');
+  const search = rec.body.querySelector('#sdSearch');
+  const dlLabel = rec.body.querySelector('[data-sd-dl]');
+  const dlBar = rec.body.querySelector('[data-sd-bar]');
+  const installedCount = rec.body.querySelector('[data-sd-installed-count]');
+  const countLabel = rec.body.querySelector('[data-sd-count]');
+
+  const hostOf = (url) => (url ? steamHost(url) : 'github.com');
+  const art = (name, url, extra) =>
+    '<div class="sd-art"' + (extra || '') + '>' +
+      '<span class="sd-letter">' + (name[0] || 'W').toUpperCase() + '</span>' +
+      '<img class="sd-fav" src="https://' + hostOf(url) + '/favicon.ico" alt="" loading="lazy"' +
+        ' data-fb="https://www.google.com/s2/favicons?domain=' + hostOf(url) + '&sz=64"' +
+        ' onerror="if(this.dataset.fb){this.src=this.dataset.fb;this.dataset.fb=\'\'}else{this.style.display=\'none\'}">' +
+    '</div>';
+
+  const card = (p) => {
+    const name = p[0], url = p[1], src = p[2];
+    const id = steamAppId(name);
+    const installed = APPS.some(a => a.id === id);
+    return '<div class="sd-card" data-sd-open="' + encodeURIComponent(name) + '">' +
+      art(name, url) +
+      '<div class="sd-meta"><b title="' + name.replace(/"/g, '&quot;') + '">' + name.replace(/</g, '&lt;') + '</b>' +
+      '<span>' + (url ? steamHost(url) : 'source only') + '</span></div>' +
+      '<div class="sd-actions">' +
+        (url ? (installed
+          ? '<button class="btn" type="button" data-sd-play="' + id + '">Play</button>'
+          : '<button class="btn" type="button" data-sd-install="' + encodeURIComponent(name) + '|' + encodeURIComponent(url) + '">Install</button>')
+          : '<span class="sd-tag">no build</span>') +
+        (src ? '<a class="btn" style="text-decoration:none" href="' + src + '" target="_blank" rel="noopener noreferrer">Source ↗</a>' : '') +
+      '</div></div>';
+  };
+
+  const updateCounts = () => {
+    installedCount.textContent = steamInstalled().length + ' installed';
+    countLabel.textContent = 'WEB PORTS · ' + STEAM_PORTS.filter(p => p[1]).length + ' playable';
+  };
+
+  const openDetail = (name) => {
+    const port = STEAM_PORTS.find(p => p[0] === name);
+    if (!port) return;
+    selected = name;
+    const n = port[0], url = port[1], src = port[2];
+    const id = steamAppId(n);
+    const installed = APPS.some(a => a.id === id);
+    const played = steamPlay()[id] || 0;
+    detail.style.width = '320px';
+    detail.innerHTML =
+      '<div style="padding:12px">' +
+        '<button class="btn" type="button" data-sd-back style="margin-bottom:10px">◀ Back</button>' +
+        '<div style="border-radius:10px;overflow:hidden">' + art(n, url, ' style="height:120px"') + '</div>' +
+        '<h3 style="margin:10px 0 2px;font-size:15px">' + n.replace(/</g, '&lt;') + '</h3>' +
+        '<div style="color:#7d8b9d;font-size:11.5px">' + (url ? steamHost(url) : 'source repository only') + '</div>' +
+        '<div style="display:flex;gap:6px;flex-wrap:wrap;margin:12px 0">' +
+          (url ? (installed
+            ? '<button class="btn" type="button" data-sd-play="' + id + '">Play</button><button class="btn" type="button" data-sd-uninstall="' + id + '">Uninstall</button>'
+            : '<button class="btn" type="button" data-sd-install="' + encodeURIComponent(n) + '|' + encodeURIComponent(url) + '">Install</button>')
+            : '') +
+          (src ? '<a class="btn" style="text-decoration:none" href="' + src + '" target="_blank" rel="noopener noreferrer">Source ↗</a>' : '') +
+        '</div>' +
+        '<div style="background:#101720;border:1px solid #222c38;border-radius:8px;padding:10px;font-size:11.5px;color:#93a2b5;line-height:1.6">' +
+          '<div><b style="color:#dfe8f3">Playtime</b> ' + steamFmt(played) + '</div>' +
+          '<div><b style="color:#dfe8f3">In library</b> ' + (installed ? 'yes' : 'no') + '</div>' +
+          '<div><b style="color:#dfe8f3">Offline cache</b> only if the host sends CORS headers; install reports the result</div>' +
+        '</div>' +
+        '<div style="margin-top:12px;font-size:11.5px;color:#6b7a8f;line-height:1.6">' +
+          '<b style="color:#93a2b5">Screenshots</b><br>None. These are third-party ports, not Steam apps, so there is no media, no achievements and no review score. This pane shows only facts that exist.' +
+        '</div>' +
+      '</div>';
+    bind();
+  };
+
+  const paint = () => {
+    const q = query.trim().toLowerCase();
+    updateCounts();
+
+    if (tab === 'friends') {
+      detail.style.width = '0';
+      detail.innerHTML = '';
+      body.innerHTML =
+        '<div style="max-width:520px;padding:18px;background:#121922;border:1px solid #232d38;border-radius:12px;color:#93a2b5;font-size:12.5px;line-height:1.7">' +
+          '<b style="color:#dfe8f3;font-size:14px">Friends and chat</b><br>' +
+          'Nova OS has no Steam network behind it, so there is no friend list, presence or messaging. Anything shown here would be invented. Local playtime is real and lives in the detail pane.' +
+        '</div>';
+      return;
+    }
+
+    if (tab === 'store') {
+      const rows = STEAM_PORTS.filter(p => !q || p[0].toLowerCase().includes(q));
+      const slice = rows.slice(0, shown);
+      body.innerHTML =
+        '<p class="small" style="color:#7d8b9d;margin:0 0 10px">Discovery only: every catalogue entry, including the ' + (STEAM_PORTS.length - STEAM_PORTS.filter(p => p[1]).length) + ' with source and no playable build. No purchases, prices or wishlist — this OS has no storefront.</p>' +
+        '<div class="sd-grid' + (big ? ' sd-big' : '') + '">' + slice.map(card).join('') + '</div>' +
+        (rows.length > slice.length ? '<div style="text-align:center;padding:14px"><button class="btn" type="button" data-sd-more>Show more (' + (rows.length - slice.length) + ')</button></div>' : '');
+      bind();
+      return;
+    }
+
+    if (tab === 'installed') {
+      const list = steamInstalled();
+      body.innerHTML = list.length
+        ? '<div class="sd-grid' + (big ? ' sd-big' : '') + '">' + list.map(x => card([x.name, x.url, null])).join('') + '</div>'
+        : '<p class="small" style="color:#7d8b9d">Nothing installed. Open the Library and press Install.</p>';
+      bind();
+      return;
+    }
+
+    const rows = STEAM_PORTS.filter(p => p[1] && (!q || p[0].toLowerCase().includes(q)));
+    const slice = rows.slice(0, shown);
+    body.innerHTML =
+      '<div class="sd-grid' + (big ? ' sd-big' : '') + '">' + slice.map(card).join('') + '</div>' +
+      (rows.length > slice.length ? '<div style="text-align:center;padding:14px"><button class="btn" type="button" data-sd-more>Show more (' + (rows.length - slice.length) + ')</button></div>' : '') +
+      '<p class="small" style="color:#5d6b7d;margin-top:10px">' + rows.length + ' playable ports. Click a card for details.</p>';
+    bind();
+  };
+
+  const bind = () => {
+    body.querySelectorAll('[data-sd-open]').forEach(el => {
+      el.addEventListener('click', (ev) => {
+        if (ev.target.closest('button,a')) return;
+        openDetail(decodeURIComponent(el.dataset.sdOpen));
+      });
+    });
+    body.querySelectorAll('[data-sd-install]').forEach(b => {
+      b.addEventListener('click', () => {
+        const parts = b.dataset.sdInstall.split('|').map(decodeURIComponent);
+        startInstall(parts[0], parts[1]);
+      });
+    });
+    body.querySelectorAll('[data-sd-play]').forEach(b => b.addEventListener('click', () => openApp(b.dataset.sdPlay)));
+    const more = body.querySelector('[data-sd-more]');
+    if (more) more.addEventListener('click', () => { shown += 160; paint(); });
+    detail.querySelectorAll('[data-sd-play]').forEach(b => b.addEventListener('click', () => openApp(b.dataset.sdPlay)));
+    detail.querySelectorAll('[data-sd-install]').forEach(b => {
+      b.addEventListener('click', () => {
+        const parts = b.dataset.sdInstall.split('|').map(decodeURIComponent);
+        startInstall(parts[0], parts[1]);
+      });
+    });
+    detail.querySelectorAll('[data-sd-uninstall]').forEach(b => b.addEventListener('click', () => { steamUninstall(b.dataset.sdUninstall); paint(); if (selected) openDetail(selected); }));
+    const back = detail.querySelector('[data-sd-back]');
+    if (back) back.addEventListener('click', () => { detail.style.width = '0'; detail.innerHTML = ''; selected = null; });
+  };
+
+  const startInstall = async (name, url) => {
+    const entry = steamInstall(name, url);
+    paint();
+    const item = { name: name, pct: 0, state: 'downloading' };
+    queue.push(item);
+    const render = () => {
+      const active = queue.find(x => x.state === 'downloading');
+      if (active) {
+        dlLabel.textContent = 'Downloading ' + active.name + ' — ' + active.pct + '%';
+        dlBar.style.width = active.pct + '%';
+      } else {
+        const last = queue[queue.length - 1];
+        dlLabel.textContent = last ? last.name + ': ' + (last.state === 'cached' ? 'cached offline' : 'online only — host blocks caching') : 'No downloads';
+        dlBar.style.width = last && last.state === 'cached' ? '100%' : '0%';
+      }
+      updateCounts();
+    };
+    render();
+    const result = await steamPrefetch(entry, p => { item.pct = p; render(); });
+    item.state = result;
+    render();
+    paint();
+    if (selected === name) openDetail(name);
+  };
+
+  rec.body.querySelectorAll('[data-sd-tab]').forEach(b => {
+    b.addEventListener('click', () => {
+      tab = b.dataset.sdTab;
+      rec.body.querySelectorAll('[data-sd-tab]').forEach(x => x.classList.toggle('on', x === b));
+      shown = 120;
+      paint();
+    });
+  });
+  search.addEventListener('input', () => { query = search.value; shown = 120; paint(); });
+  rec.body.querySelector('[data-sd-big]').addEventListener('click', () => {
+    big = !big;
+    const el = rec.el || rec.body;
+    if (big && el.requestFullscreen) el.requestFullscreen().catch(() => {});
+    if (!big && document.fullscreenElement) document.exitFullscreen().catch(() => {});
+    paint();
+  });
+
+  if (!document.getElementById('sdCss')) {
+    const st = document.createElement('style');
+    st.id = 'sdCss';
+    st.textContent = '.sd-tab{text-align:left;background:transparent;border:0;color:#93a2b5;padding:7px 9px;border-radius:6px;font:12.5px system-ui;cursor:pointer}' +
+      '.sd-tab:hover{background:#161e27;color:#dfe8f3}.sd-tab.on{background:#1b2733;color:#8fd2ff}' +
+      '.sd-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:10px}' +
+      '.sd-grid.sd-big{grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:14px}' +
+      '.sd-card{background:#141b23;border:1px solid #222c38;border-radius:8px;overflow:hidden;display:flex;flex-direction:column;cursor:pointer}' +
+      '.sd-card:hover{border-color:#3a4d63}' +
+      '.sd-art{position:relative;height:66px;display:flex;align-items:center;justify-content:center;overflow:hidden;background:linear-gradient(135deg,#2b4a6f,#16222f)}' +
+      '.sd-letter{position:absolute;font-weight:800;font-size:30px;color:#9fc4e8;opacity:.22}' +
+      '.sd-fav{position:relative;width:34px;height:34px;border-radius:7px;background:#0d1218;box-shadow:0 4px 14px rgba(0,0,0,.45)}' +
+      '.sd-meta{display:flex;flex-direction:column;gap:2px;padding:7px 9px 0;min-height:38px}' +
+      '.sd-meta b{font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}' +
+      '.sd-meta span{font-size:10.5px;color:#6b7a8f}' +
+      '.sd-actions{display:flex;gap:5px;padding:7px 9px 9px;align-items:center;margin-top:auto}' +
+      '.sd-tag{font-size:10px;color:#6b7a8f;border:1px solid #2a3542;border-radius:4px;padding:2px 5px}';
+    document.head.appendChild(st);
+  }
+
+  paint();
+}
+
+if (!APPS.some(a => a.id === 'steamdesk')) {
+  APPS.push({ id: 'steamdesk', name: 'Steam Desktop', size: [1200, 780], pkg: true, pkgColor: '#1b2838', customIcon: true,
+    glyph: '<img src="' + STEAM_ICON + '" alt="" style="width:70%;height:70%;object-fit:contain">',
+    render: renderSteamDesktop });
+}
+
+
+/* ==========================================================================
+   Windows (Wine) — run 32-bit Windows .exe files without installing Windows.
+
+   BoxedWine emulates an x86 CPU and a Linux kernel, then runs an unmodified
+   32-bit Wine on top of that, so a Windows programme executes inside the tab:
+   nothing is uploaded, no server streams it, and no Windows licence is
+   involved. The engine is a large WASM build, so this app embeds the project's
+   own demo page and lets its file picker open your .exe.
+   ========================================================================== */
+
+function renderWine(rec) {
+  const SRC = "https://www.boxedwine.org/demo/";
+  rec.body.innerHTML =
+    '<div style="display:flex;flex-direction:column;height:100%">' +
+      '<div class="row" style="padding:6px 10px;border-bottom:1px solid var(--line);gap:8px;align-items:center">' +
+        '<b class="small">Wine &middot; 32-bit</b>' +
+        '<span class="small muted grow">Choose an .exe inside the page — it runs in this tab, not on a server.</span>' +
+        '<button class="btn" id="wnReload">Reload</button>' +
+        '<button class="btn" id="wnTab">Open in a tab</button>' +
+      '</div>' +
+      '<iframe id="wnFrame" title="BoxedWine" src="' + SRC + '" style="flex:1;border:0;background:#0b0b0b" ' +
+        'allow="clipboard-read; clipboard-write; fullscreen; gamepad"></iframe>' +
+    '</div>';
+  rec.body.querySelector('#wnReload').addEventListener('click', () => {
+    const f = rec.body.querySelector('#wnFrame');
+    try { f.contentWindow.location.reload(); } catch { f.src = SRC; }
+  });
+  rec.body.querySelector('#wnTab').addEventListener('click', () => window.open(SRC, '_blank', 'noopener'));
+}
+
+if (!APPS.some(a => a.id === 'wine')) {
+  APPS.push({ id: 'wine', name: 'Windows (Wine)', glyph: 'W', size: [1000, 700], render: renderWine });
 }
 
 
@@ -25585,6 +25990,32 @@ function renderSteam(rec) {
 if (!APPS.some(a => a.id === 'steam')) {
   APPS.push({ id: 'steam', name: 'Steam', glyph: 'S', size: [940, 640], render: renderSteam });
 }
+
+/* The Steam app gets a doorway to the Linux library, so installation lives
+   where a player expects it. */
+{
+  const steamApp = APPS.find(a => a.id === 'steam');
+  if (steamApp) {
+    const base = steamApp.render;
+    steamApp.render = (rec) => {
+      base(rec);
+      try {
+        rec.body.style.position = 'relative';
+        const bar = document.createElement('div');
+        bar.style.cssText = 'position:absolute;right:10px;top:8px;z-index:6;display:flex;gap:6px';
+        const b = document.createElement('button');
+        b.className = 'btn';
+        b.type = 'button';
+        b.textContent = 'Linux library';
+        b.addEventListener('click', () => openApp('linuxgames'));
+        bar.appendChild(b);
+        rec.body.appendChild(bar);
+      } catch (e) {}
+    };
+  }
+}
+
+
 
 
 /* ==========================================================================
@@ -27361,7 +27792,6 @@ window.NV = (() => {
     phone:    { c: "#0b1a1c", i: "phone", dark: true },
     launcher: { c: "#2a1030", i: "joystick", dark: true },
     linux:    { c: "#26332c", i: "terminal", dark: true },
-    winvm:    { c: "#3b82f6", i: "monitor" },
     ubuntu:   { c: "#e95420", i: "monitor" },
     store:    { c: "#2f7cf0", i: "archive" },
     paint:    { c: "#f06fa8", i: "image" },
@@ -28688,6 +29118,10 @@ window.NV = (() => {
   /* ------------------------------------------------------------ wallpapers */
   const WALLS = [
     {
+      id: "bloom11", name: "Bloom (Windows 11)",
+      css: "radial-gradient(900px 720px at 16% 8%, #6cc7ff 0%, rgba(108,199,255,0) 58%), radial-gradient(880px 700px at 86% 2%, #b48cff 0%, rgba(180,140,255,0) 58%), radial-gradient(1000px 780px at 70% 108%, #ff9ecb 0%, rgba(255,158,203,0) 58%), radial-gradient(720px 600px at 24% 104%, #8fd7ff 0%, rgba(143,215,255,0) 60%), linear-gradient(150deg, #eaf4ff 0%, #dfe9ff 46%, #f2e6ff 100%)"
+    },
+    {
       id: "orchid", name: "Orchid Dusk",
       css: "radial-gradient(900px 700px at 16% 4%, #5b6cff 0%, rgba(91,108,255,0) 58%), radial-gradient(820px 720px at 88% 6%, #c13fe0 0%, rgba(193,63,224,0) 55%), radial-gradient(1000px 720px at 70% 108%, #26c7c4 0%, rgba(38,199,196,0) 55%), radial-gradient(760px 600px at 20% 104%, #6b2fd0 0%, rgba(107,47,208,0) 60%), linear-gradient(155deg, #253878 0%, #3b1f74 48%, #150f30 100%)"
     },
@@ -28720,6 +29154,7 @@ window.NV = (() => {
     if (!quiet) toast("Wallpaper · " + w.name);
   }
   const ACCENTS = [
+    { name: "Windows blue", value: "#0067c0" },
     { name: "Nova blue", value: "#4f8cff" },
     { name: "Orchid", value: "#9a6cff" },
     { name: "Rose", value: "#f06fa8" },
